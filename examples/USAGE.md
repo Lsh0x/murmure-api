@@ -1,5 +1,24 @@
 # Quick Usage Guide
 
+## Rust File Client
+
+The simplest way to test transcription with audio files.
+
+### Quick Start
+
+```bash
+cd examples
+cargo run --example rust_file_client -- audio.wav
+```
+
+### Streaming Mode
+
+```bash
+cargo run --example rust_file_client -- audio.wav --stream
+```
+
+See [README_RUST_FILE_CLIENT.md](README_RUST_FILE_CLIENT.md) for complete documentation.
+
 ## Rust Recording Client
 
 The easiest way to test the server with real-time audio recording.

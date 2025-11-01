@@ -5,8 +5,9 @@ Example implementations showing how to interact with the Murmure gRPC server.
 ## Available Examples
 
 1. **Rust Recording Client** (`rust_record_client.rs`) - Records audio from microphone and transcribes
-2. **Python Client** (`python_client.py`) - Simple file-based transcription client
-3. **Rust Client** (`rust_client.rs`) - Template for file-based transcription
+2. **Rust File Client** (`rust_file_client.rs`) - Transcribes audio files (supports streaming and file-based modes)
+3. **Python Client** (`python_client.py`) - Simple file-based transcription client
+4. **Rust Client Template** (`rust_client.rs`) - Template for file-based transcription
 
 ## Rust Recording Client (Recommended)
 
@@ -29,6 +30,41 @@ cargo run --example rust_record_client -- --duration 5
 ### Documentation
 
 See [README_RUST_CLIENT.md](README_RUST_CLIENT.md) for complete documentation.
+
+## Rust File Client
+
+A Rust client for transcribing audio files from disk.
+
+### Quick Start
+
+```bash
+cd examples
+# File-based transcription (default)
+cargo run --example rust_file_client -- audio.wav
+
+# Streaming mode
+cargo run --example rust_file_client -- audio.wav --stream
+
+# Custom server and options
+cargo run --example rust_file_client -- audio.wav \
+  --server http://localhost:50052 \
+  --no-dictionary
+```
+
+### Features
+
+- Transcribes audio files from disk
+- Supports both file-based and streaming RPCs
+- Configurable server address
+- Dictionary correction toggle
+- Error handling and user feedback
+
+### Options
+
+- `<audio_file>` - Path to WAV file (required)
+- `--server <address>` - Server address (default: http://localhost:50051)
+- `--no-dictionary` - Disable dictionary corrections
+- `--stream` - Use streaming RPC instead of file-based
 
 ## Python Client
 

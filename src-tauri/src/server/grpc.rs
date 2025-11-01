@@ -33,17 +33,25 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
         let req = request.into_inner();
         let audio_data = req.audio_data;
 
+        tracing::debug!("Received transcribe_file request: {} bytes", audio_data.len());
+
         match self.service.transcribe_audio_bytes(&audio_data) {
-            Ok(text) => Ok(Response::new(TranscribeFileResponse {
-                text,
-                success: true,
-                error: String::new(),
-            })),
-            Err(e) => Ok(Response::new(TranscribeFileResponse {
-                text: String::new(),
-                success: false,
-                error: format!("Transcription failed: {}", e),
-            })),
+            Ok(text) => {
+                tracing::info!("Transcription successful: {} chars", text.len());
+                Ok(Response::new(TranscribeFileResponse {
+                    text,
+                    success: true,
+                    error: String::new(),
+                }))
+            }
+            Err(e) => {
+                tracing::error!("Transcription failed: {}", e);
+                Ok(Response::new(TranscribeFileResponse {
+                    text: String::new(),
+                    success: false,
+                    error: format!("Transcription failed: {}", e),
+                }))
+            }
         }
     }
 

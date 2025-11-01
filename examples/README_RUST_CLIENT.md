@@ -120,6 +120,36 @@ Press Ctrl+C to stop early
 Hello, this is a test of the Murmure transcription service.
 ```
 
+## Microphone Permission (macOS)
+
+**Important**: On macOS, you must grant microphone permission to your terminal application.
+
+### Symptoms of Permission Denial
+- Audio levels stay at 0 during recording
+- All samples are silent (0.0% non-zero samples)
+- Empty transcription results
+
+### How to Fix
+
+**Quick Fix:**
+```bash
+./examples/fix-mic-permission.sh
+```
+
+**Manual Steps:**
+1. Open **System Settings** → **Privacy & Security** → **Microphone**
+2. Find your terminal app (Terminal, iTerm, Cursor, VS Code, etc.)
+3. Enable microphone access (check the box)
+4. **Restart your terminal app completely** (permissions are cached)
+5. Run the client again
+
+**Command to Open Settings:**
+```bash
+open 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+```
+
+The client will detect if audio is silent and show clear warnings with instructions.
+
 ## Troubleshooting
 
 ### No Input Device Found

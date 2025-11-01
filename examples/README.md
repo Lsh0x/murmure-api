@@ -31,6 +31,8 @@ cargo run --example rust_record_client -- --duration 5
 
 See [README_RUST_CLIENT.md](README_RUST_CLIENT.md) for complete documentation.
 
+**Note**: On macOS, microphone permission is required. See troubleshooting section in the docs.
+
 ## Rust File Client
 
 A Rust client for transcribing audio files from disk.

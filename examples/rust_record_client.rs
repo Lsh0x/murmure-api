@@ -83,9 +83,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if transcription.success {
         println!("\n📝 Transcription:");
-        println!("{}", transcription.text);
+        if transcription.text.is_empty() {
+            println!("(Empty transcription - audio may be too short, silent, or unrecognized)");
+            println!("\n💡 Possible reasons:");
+            println!("   - Audio was too quiet or silent");
+            println!("   - Audio format mismatch");
+            println!("   - Server processed but found no speech");
+            println!("   - Try speaking louder or checking microphone levels");
+        } else {
+            println!("{}", transcription.text);
+        }
     } else {
-        eprintln!("❌ Transcription failed: {}", transcription.error);
+        eprintln!("\n❌ Transcription failed: {}", transcription.error);
+        if transcription.error.is_empty() {
+            eprintln!("   (No error message provided by server)");
+        }
     }
 
     Ok(())
@@ -93,12 +105,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
+    
+    // List all available input devices for debugging
+    let input_devices: Vec<_> = host.input_devices()?.collect();
+    if input_devices.is_empty() {
+        return Err("❌ No input devices found. Please check microphone permissions.".into());
+    }
+    
+    println!("   Available input devices:");
+    for (i, dev) in input_devices.iter().enumerate() {
+        if let Ok(name) = dev.name() {
+            println!("     {}. {}", i + 1, name);
+        }
+    }
+    
     let device = host
         .default_input_device()
-        .ok_or("No input device available")?;
+        .ok_or("❌ No default input device available. Check microphone permissions in System Settings > Privacy & Security > Microphone")?;
 
-    let config = device.default_input_config()?;
-    println!("   Device: {}", device.name()?);
+    let device_name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+    println!("\n   Using device: {}", device_name);
+    
+    let config = match device.default_input_config() {
+        Ok(config) => config,
+        Err(e) => {
+            return Err(format!(
+                "❌ Failed to get input config: {}\n   This usually means microphone access is denied. Please grant microphone permission to Terminal/iTerm/Cursor in System Settings > Privacy & Security > Microphone",
+                e
+            ).into());
+        }
+    };
+    
     println!("   Sample rate: {} Hz", config.sample_rate().0);
     println!("   Channels: {}", config.channels());
 
@@ -116,19 +153,77 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
     let writer = WavWriter::new(BufWriter::new(file), spec)?;
     let writer_arc = Arc::new(std::sync::Mutex::new(writer));
 
-    let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => build_stream::<f32>(&device, &config, writer_arc.clone())?,
-        cpal::SampleFormat::I16 => build_stream::<i16>(&device, &config, writer_arc.clone())?,
-        cpal::SampleFormat::I32 => build_stream::<i32>(&device, &config, writer_arc.clone())?,
+    println!("   Testing microphone access...");
+    let result = match config.sample_format() {
+        cpal::SampleFormat::F32 => build_stream::<f32>(&device, &config, writer_arc.clone()),
+        cpal::SampleFormat::I16 => build_stream::<i16>(&device, &config, writer_arc.clone()),
+        cpal::SampleFormat::I32 => build_stream::<i32>(&device, &config, writer_arc.clone()),
         _ => return Err("Unsupported sample format".into()),
     };
 
-    stream.play()?;
-    println!("   Recording...");
+    let (stream, audio_stats) = match result {
+        Ok((s, stats)) => (s, stats),
+        Err(e) => {
+            return Err(format!(
+                "❌ Failed to create audio stream: {}\n   This usually means:\n   1. Microphone permission denied - Check System Settings > Privacy & Security > Microphone\n   2. Microphone is in use by another app\n   3. Microphone hardware issue",
+                e
+            ).into());
+        }
+    };
 
-    // Record for specified duration
-    std::thread::sleep(Duration::from_secs(duration_secs));
+    println!("   ✅ Microphone stream created (this doesn't guarantee permission)");
+    
+    if let Err(e) = stream.play() {
+        return Err(format!(
+            "❌ Failed to start recording stream: {}\n   Check microphone permissions and try again.",
+            e
+        ).into());
+    }
+    
+    println!("   Recording for {} seconds...", duration_secs);
+    println!("   💡 Speak now! If audio levels stay at 0, microphone permission is likely denied.");
 
+    // Record and monitor audio levels in real-time
+    let check_interval = std::time::Duration::from_millis(500);
+    let start = std::time::Instant::now();
+    let mut last_amplitude: i16 = 0;
+    let mut warning_printed = false;
+    
+    loop {
+        std::thread::sleep(std::cmp::min(check_interval, Duration::from_secs(duration_secs).saturating_sub(start.elapsed())));
+        
+        let stats = audio_stats.lock().unwrap();
+        let current_amplitude = stats.1;
+        let elapsed = start.elapsed();
+        
+        if current_amplitude != last_amplitude {
+            println!("   📊 Audio level: {} ({} samples processed)", current_amplitude, stats.0);
+            last_amplitude = current_amplitude;
+        }
+        
+        if elapsed >= Duration::from_secs(duration_secs) {
+            break;
+        }
+        
+        // Check early if completely silent after 2 seconds (only warn once)
+        if !warning_printed && elapsed >= Duration::from_secs(2) && stats.1 == 0 && stats.0 > 0 {
+            println!("\n   ⚠️  WARNING: No audio detected after 2 seconds!");
+            println!("   This likely means microphone permission is denied on macOS.");
+            println!("\n   📋 To fix this:");
+            println!("   1. Open System Settings → Privacy & Security → Microphone");
+            println!("   2. Find your terminal app (Terminal, iTerm, Cursor, etc.)");
+            println!("   3. Enable microphone access");
+            println!("   4. Restart your terminal app");
+            println!("\n   Or run: open 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'");
+            println!("   (Recording will continue, but will be silent without permission)\n");
+            warning_printed = true;
+        }
+    }
+
+    let final_stats = audio_stats.lock().unwrap();
+    println!("\n   Recording complete.");
+    println!("   Final stats: {} samples, max amplitude: {}", final_stats.0, final_stats.1);
+    
     drop(stream);
 
     // Finalize WAV file
@@ -145,6 +240,42 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
     // Read WAV file into memory
     let audio_data = std::fs::read(&temp_file)?;
     
+    // Debug: Check if audio has non-zero samples
+    use hound::WavReader;
+    let reader = WavReader::open(&temp_file)?;
+    let samples: Result<Vec<i16>, _> = reader.into_samples().collect();
+    if let Ok(samples) = samples {
+        let non_zero_count = samples.iter().filter(|&&s| s != 0).count();
+        let total_count = samples.len();
+        let max_amplitude = samples.iter().map(|&s| s.abs()).max().unwrap_or(0);
+        
+        println!("   Audio analysis:");
+        println!("   - Total samples: {}", total_count);
+        println!("   - Non-zero samples: {} ({:.1}%)", non_zero_count, 
+                 if total_count > 0 { (non_zero_count as f64 / total_count as f64) * 100.0 } else { 0.0 });
+        println!("   - Max amplitude: {} / {}", max_amplitude, i16::MAX);
+        
+        if non_zero_count == 0 {
+            println!("   ❌ ERROR: Audio appears to be completely silent!");
+            println!("   This indicates the microphone is not capturing audio.");
+            println!("   Possible causes:");
+            println!("   1. Microphone permission denied");
+            println!("   2. Microphone is muted or volume is zero");
+            println!("   3. Wrong microphone selected");
+            println!("   4. Microphone hardware disconnected");
+            return Err("Audio recording is silent - microphone may not have access or is muted".into());
+        } else if max_amplitude < 100 {
+            println!("   ⚠️  WARNING: Audio is very quiet (max amplitude < 100)");
+            println!("   Try speaking louder or increasing microphone input volume.");
+        } else {
+            println!("   ✅ Audio levels look good!");
+        }
+    }
+    
+    // Optionally keep the file for debugging (comment out cleanup)
+    // Uncomment the next line to keep the file for inspection:
+    // println!("   Debug: WAV file saved at: {}", temp_file.display());
+    
     // Clean up
     let _ = std::fs::remove_file(&temp_file);
 
@@ -157,17 +288,24 @@ fn build_stream<T>(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
     writer: Arc<std::sync::Mutex<WavWriterType>>,
-) -> Result<cpal::Stream, Box<dyn std::error::Error>>
+) -> Result<(cpal::Stream, Arc<std::sync::Mutex<(usize, i16)>>), Box<dyn std::error::Error>>
 where
     T: cpal::Sample + cpal::SizedSample + Send + 'static,
     f32: cpal::FromSample<T>,
 {
     let channels = config.channels() as usize;
+    
+    // Track audio levels in real-time
+    let audio_stats = Arc::new(std::sync::Mutex::new((0usize, 0i16))); // (sample_count, max_amplitude)
+    let stats_clone = audio_stats.clone();
 
     let stream = device.build_input_stream(
         &config.clone().into(),
         move |data: &[T], _: &cpal::InputCallbackInfo| {
             let mut writer = writer.lock().unwrap();
+            let mut stats = stats_clone.lock().unwrap();
+            stats.0 += data.len() / channels;
+            
             for frame in data.chunks_exact(channels) {
                 let sample = if channels == 1 {
                     frame[0].to_sample::<f32>()
@@ -178,6 +316,10 @@ where
 
                 // Convert to i16 and write
                 let sample_i16 = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                let amplitude = sample_i16.abs();
+                if amplitude > stats.1 {
+                    stats.1 = amplitude;
+                }
                 let _ = writer.write_sample(sample_i16);
             }
         },
@@ -185,6 +327,6 @@ where
         None,
     )?;
 
-    Ok(stream)
+    Ok((stream, audio_stats))
 }
 

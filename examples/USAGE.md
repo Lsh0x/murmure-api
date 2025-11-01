@@ -23,6 +23,15 @@ See [README_RUST_FILE_CLIENT.md](README_RUST_FILE_CLIENT.md) for complete docume
 
 The easiest way to test the server with real-time audio recording.
 
+### ⚠️ macOS Microphone Permission
+
+On macOS, you must grant microphone permission to your terminal app:
+1. System Settings → Privacy & Security → Microphone
+2. Enable your terminal app (Terminal, iTerm, Cursor, etc.)
+3. Restart terminal and try again
+
+Or run: `./examples/fix-mic-permission.sh`
+
 ### Prerequisites
 
 1. Server running (see main README)

@@ -1,5 +1,18 @@
 # Quick Usage Guide
 
+## Rust Streaming Client ⭐
+
+For continuous conversation transcription:
+
+```bash
+cd examples
+cargo run --example rust_streaming_client
+```
+
+Press Ctrl+C to stop and see full transcript.
+
+See [README_STREAMING_CLIENT.md](README_STREAMING_CLIENT.md) for details.
+
 ## Rust File Client
 
 The simplest way to test transcription with audio files.

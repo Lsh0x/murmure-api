@@ -4,10 +4,11 @@ Example implementations showing how to interact with the Murmure gRPC server.
 
 ## Available Examples
 
-1. **Rust Recording Client** (`rust_record_client.rs`) - Records audio from microphone and transcribes
-2. **Rust File Client** (`rust_file_client.rs`) - Transcribes audio files (supports streaming and file-based modes)
-3. **Python Client** (`python_client.py`) - Simple file-based transcription client
-4. **Rust Client Template** (`rust_client.rs`) - Template for file-based transcription
+1. **Rust Streaming Client** (`rust_streaming_client.rs`) - **NEW!** Continuous conversation transcription
+2. **Rust Recording Client** (`rust_record_client.rs`) - Records audio from microphone and transcribes
+3. **Rust File Client** (`rust_file_client.rs`) - Transcribes audio files (supports streaming and file-based modes)
+4. **Python Client** (`python_client.py`) - Simple file-based transcription client
+5. **Rust Client Template** (`rust_client.rs`) - Template for file-based transcription
 
 ## Rust Recording Client (Recommended)
 
@@ -32,6 +33,43 @@ cargo run --example rust_record_client -- --duration 5
 See [README_RUST_CLIENT.md](README_RUST_CLIENT.md) for complete documentation.
 
 **Note**: On macOS, microphone permission is required. See troubleshooting section in the docs.
+
+## Rust Streaming Client ⭐ NEW!
+
+A continuous streaming client for real-time conversation transcription.
+
+### Quick Start
+
+```bash
+cd examples
+cargo run --example rust_streaming_client
+```
+
+### Features
+
+- Records audio continuously in chunks
+- Real-time transcription updates
+- Accumulates full conversation transcript
+- Press Ctrl+C to stop and view full transcript
+
+### Usage
+
+```bash
+# Default (2 second chunks)
+cargo run --example rust_streaming_client
+
+# Custom chunk duration
+cargo run --example rust_streaming_client -- --chunk-duration 3
+
+# Custom server
+cargo run --example rust_streaming_client -- \
+  --server http://localhost:50052 \
+  --chunk-duration 2
+```
+
+### Documentation
+
+See [README_STREAMING_CLIENT.md](README_STREAMING_CLIENT.md) for complete documentation.
 
 ## Rust File Client
 

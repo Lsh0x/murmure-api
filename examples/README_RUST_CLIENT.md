@@ -158,7 +158,21 @@ The client will detect if audio is silent and show clear warnings with instructi
 Error: No input device available
 ```
 
-**Solution**: Ensure your microphone is connected and recognized by your OS.
+**Solution**: 
+- Ensure your microphone is connected and recognized by your OS
+- On macOS: Check microphone permission in System Settings → Privacy & Security → Microphone
+- List available devices by checking the client output
+
+### Silent Audio / Permission Denied (macOS)
+
+If you see:
+- `Audio level: 0` during recording
+- `Non-zero samples: 0 (0.0%)`
+- `Max amplitude: 0`
+
+This indicates microphone permission is denied on macOS.
+
+**Solution**: See [Microphone Permission (macOS)](#microphone-permission-macos) section above.
 
 ### Connection Refused
 

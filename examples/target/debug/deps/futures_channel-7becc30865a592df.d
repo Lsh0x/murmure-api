@@ -1,0 +1,11 @@
+/Users/lsh/projects/murmure-api/examples/target/debug/deps/futures_channel-7becc30865a592df.d: /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lib.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lock.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/mod.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/queue.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/oneshot.rs
+
+/Users/lsh/projects/murmure-api/examples/target/debug/deps/libfutures_channel-7becc30865a592df.rlib: /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lib.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lock.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/mod.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/queue.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/oneshot.rs
+
+/Users/lsh/projects/murmure-api/examples/target/debug/deps/libfutures_channel-7becc30865a592df.rmeta: /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lib.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lock.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/mod.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/queue.rs /Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/oneshot.rs
+
+/Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lib.rs:
+/Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/lock.rs:
+/Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/mod.rs:
+/Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/mpsc/queue.rs:
+/Users/lsh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/futures-channel-0.3.31/src/oneshot.rs:

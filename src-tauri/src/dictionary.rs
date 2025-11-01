@@ -3,7 +3,6 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tauri::{AppHandle, Manager};
 
 pub struct Dictionary(pub Arc<Mutex<Vec<String>>>);
 
@@ -68,37 +67,6 @@ pub fn fix_transcription_with_dictionary(
 }
 
 // Downloaded from https://github.com/apache/commons-codec/tree/rel/commons-codec-1.15/src/main/resources/org/apache/commons/codec/language/bm
-pub fn get_cc_rules_path(app_handle: &AppHandle) -> anyhow::Result<PathBuf> {
-    let possible_paths = vec![
-        // 1. Chemin pour la production (bundle)
-        app_handle.path().resolve(
-            "../resources/cc-rules/",
-            tauri::path::BaseDirectory::Resource,
-        ),
-        app_handle.path().resolve(
-            "_up_/resources/cc-rules/",
-            tauri::path::BaseDirectory::Resource,
-        ),
-        app_handle
-            .path()
-            .resolve("resources/cc-rules/", tauri::path::BaseDirectory::Resource),
-    ];
-
-    // Essayer chaque chemin
-    for path_result in possible_paths {
-        match path_result {
-            Ok(ref ccrules_path) if ccrules_path.exists() => {
-                println!("Model found at: {}", ccrules_path.display());
-                return Ok(ccrules_path.clone());
-            }
-            Ok(ref ccrules_path) => {
-                println!("Model not found at: {}", ccrules_path.display());
-            }
-            Err(e) => {
-                println!("Error resolving path: {:?}", e);
-            }
-        }
-    }
-
-    anyhow::bail!("Bundled cc_rules not found in any known location");
+pub fn get_cc_rules_path(config: &crate::config::ServerConfig) -> anyhow::Result<PathBuf> {
+    config.get_cc_rules_path()
 }

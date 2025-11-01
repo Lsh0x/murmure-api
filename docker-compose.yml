@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  murmure-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: murmure-server
+    ports:
+      - "50051:50051"
+    environment:
+      - MURMURE_GRPC_PORT=50051
+      - MURMURE_LOG_LEVEL=info
+      - MURMURE_MODEL_PATH=/app/resources/parakeet-tdt-0.6b-v3-int8
+      - MURMURE_CC_RULES_PATH=/app/resources/cc-rules
+      - MURMURE_DICTIONARY=${MURMURE_DICTIONARY:-[]}
+    volumes:
+      # Mount resources directory (models and cc-rules)
+      - ./resources:/app/resources:ro
+      # Optional: mount config file
+      - ./config.json:/app/config.json:ro
+    restart: unless-stopped
+    healthcheck:
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+

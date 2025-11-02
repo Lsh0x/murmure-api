@@ -2,14 +2,16 @@
 
 ## Rust Streaming Client ⭐
 
-For continuous conversation transcription:
+Toggle recording mode: press SPACE to start, press again to stop and transcribe.
 
 ```bash
 cd examples
 cargo run --example rust_streaming_client
 ```
 
-Press Ctrl+C to stop and see full transcript.
+**Controls:**
+- Press SPACE to start/stop recording (toggle)
+- Ctrl+C to exit and see full transcript
 
 See [README_STREAMING_CLIENT.md](README_STREAMING_CLIENT.md) for details.
 

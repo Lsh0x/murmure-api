@@ -1,7 +1,7 @@
-//! Push-to-Talk Streaming Client for Murmure gRPC Server
+//! Toggle Recording Client for Murmure gRPC Server
 //!
-//! This client uses push-to-talk mode: press and hold SPACE to record,
-//! release to stop and transcribe. Perfect for precise control over recording.
+//! This client uses toggle mode: press SPACE to start recording,
+//! press SPACE again to stop and transcribe. Simple and intuitive.
 //!
 //! ## Usage
 //!
@@ -18,8 +18,7 @@
 //! ```
 //!
 //! Controls:
-//! - Hold SPACE to record audio
-//! - Release SPACE to stop recording and transcribe
+//! - Press SPACE to start/stop recording (toggle)
 //! - Press Ctrl+C to exit
 //!
 //! Options:
@@ -59,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(&"http://localhost:50051".to_string())
         .clone();
 
-    println!("🎙️  Murmure Push-to-Talk Streaming Client");
+    println!("🎙️  Murmure Toggle Recording Client");
     println!("Server: {}\n", server_address);
 
     // Set up audio recording
@@ -93,8 +92,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = TranscriptionServiceClient::connect(server_address.clone()).await?;
     println!("✅ Connected to server\n");
 
-    println!("🎤 Push-to-Talk Mode");
-    println!("   Hold SPACE to record, release to transcribe");
+    println!("🎤 Toggle Recording Mode");
+    println!("   Press SPACE to start recording");
+    println!("   Press SPACE again to stop and transcribe");
     println!("   Press Ctrl+C to exit\n");
 
     // Enable raw mode for key detection
@@ -103,6 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Track conversation text
     let mut conversation_text = String::new();
     let mut recording_count = 0;
+    let mut is_recording = false;
+    let mut recording_stop_flag: Option<Arc<AtomicBool>> = None;
+    let mut recording_handle: Option<tokio::task::JoinHandle<Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>>> = None;
 
     // Handle Ctrl+C gracefully
     let shutdown_flag = Arc::new(AtomicBool::new(false));
@@ -116,6 +119,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         // Check if Ctrl+C was pressed
         if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            // Stop any ongoing recording
+            if is_recording {
+                println!("\n🛑 Stopping recording...");
+                if let Some(flag) = recording_stop_flag.take() {
+                    flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                if let Some(handle) = recording_handle.take() {
+                    let _ = handle.await;
+                }
+            }
             disable_raw_mode()?;
             println!("\n📝 Conversation transcript:\n{}", conversation_text);
             break;
@@ -126,52 +139,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Event::Key(key_event) = event::read()? {
                 match key_event.code {
                     KeyCode::Char(' ') if key_event.kind == KeyEventKind::Press => {
-                        // Space pressed - start recording
-                        recording_count += 1;
-                        println!("🎙️  Recording #{} (hold SPACE)...", recording_count);
-                        
-                        // Record until space is released (blocking, but in async context)
-                        let audio_data = match tokio::task::spawn_blocking({
-                            let device = device.clone();
-                            let config = config.clone();
-                            move || record_until_key_release(&device, &config)
-                        }).await {
-                            Ok(Ok(data)) => data,
-                            Ok(Err(e)) => {
-                                eprintln!("❌ Recording error: {}", e);
-                                continue;
+                        if !is_recording {
+                            // Start recording
+                            recording_count += 1;
+                            is_recording = true;
+                            println!("🎙️  Recording #{} started (press SPACE again to stop)...", recording_count);
+                            
+                            // Create stop flag
+                            let stop_flag = Arc::new(AtomicBool::new(false));
+                            recording_stop_flag = Some(stop_flag.clone());
+                            
+                            // Start recording in background
+                            let device_clone = device.clone();
+                            let config_clone = config.clone();
+                            recording_handle = Some(tokio::spawn(async move {
+                                tokio::task::spawn_blocking(move || {
+                                    record_audio_continuous(&device_clone, &config_clone, stop_flag)
+                                }).await.map_err(|e| Box::new(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    format!("Task error: {}", e)
+                                )) as Box<dyn std::error::Error + Send + Sync>)?
+                            }));
+                        } else {
+                            // Stop recording
+                            is_recording = false;
+                            println!("   ⏹️  Stopping recording...");
+                            
+                            // Signal stop
+                            if let Some(flag) = recording_stop_flag.take() {
+                                flag.store(true, std::sync::atomic::Ordering::Relaxed);
                             }
-                            Err(e) => {
-                                eprintln!("❌ Task error: {}", e);
-                                continue;
-                            }
-                        };
-                        
-                        if audio_data.is_empty() {
-                            println!("⚠️  No audio recorded (too short or silent)\n");
-                            continue;
-                        }
-
-                        println!("   📤 Sending to server for transcription...");
-
-                        // Transcribe the audio
-                        match transcribe_audio(&mut client, audio_data).await {
-                            Ok(text) => {
-                                if !text.trim().is_empty() {
-                                    println!("✅ Transcription: {}\n", text);
-                                    conversation_text.push_str(&text);
-                                    conversation_text.push(' ');
-                                } else {
-                                    println!("⚠️  Empty transcription\n");
+                            
+                            // Wait for recording to finish
+                            if let Some(handle) = recording_handle.take() {
+                                let audio_data = match handle.await {
+                                    Ok(Ok(data)) => data,
+                                    Ok(Err(e)) => {
+                                        eprintln!("❌ Recording error: {}", e);
+                                        continue;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("❌ Task error: {}", e);
+                                        continue;
+                                    }
+                                };
+                                
+                                if audio_data.is_empty() {
+                                    println!("⚠️  No audio recorded (too short or silent)\n");
+                                    continue;
                                 }
-                            }
-                            Err(e) => {
-                                eprintln!("❌ Transcription error: {}\n", e);
+
+                                println!("   📤 Sending to server for transcription...");
+
+                                // Transcribe the audio
+                                match transcribe_audio(&mut client, audio_data).await {
+                                    Ok(text) => {
+                                        if !text.trim().is_empty() {
+                                            println!("✅ Transcription: {}\n", text);
+                                            conversation_text.push_str(&text);
+                                            conversation_text.push(' ');
+                                        } else {
+                                            println!("⚠️  Empty transcription\n");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("❌ Transcription error: {}\n", e);
+                                    }
+                                }
                             }
                         }
                     }
                     KeyCode::Esc => {
                         // Escape key - exit
+                        if is_recording {
+                            println!("\n🛑 Stopping recording...");
+                            if let Some(flag) = recording_stop_flag.take() {
+                                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            if let Some(handle) = recording_handle.take() {
+                                let _ = handle.await;
+                            }
+                        }
                         break;
                     }
                     _ => {}
@@ -239,13 +287,14 @@ async fn transcribe_audio(
     Ok(final_text)
 }
 
-fn record_until_key_release(
+fn record_audio_continuous(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
+    stop_flag: Arc<AtomicBool>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     // Create temporary WAV file
     let temp_file = std::env::temp_dir().join(format!(
-        "murmure-ptt-{}-{}.wav",
+        "murmure-record-{}-{}.wav",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
@@ -284,34 +333,16 @@ fn record_until_key_release(
         return Err(format!("❌ Failed to start recording: {}", e).into());
     }
 
-    // Record until space key is released (non-blocking poll)
-    loop {
-        // Poll for key events without blocking too long
-        let poll_timeout = Duration::from_millis(50);
-        if event::poll(poll_timeout)? {
-            match event::read() {
-                Ok(Event::Key(key_event)) => {
-                    if let KeyCode::Char(' ') = key_event.code {
-                        if key_event.kind == KeyEventKind::Release {
-                            break; // Space released, stop recording
-                        }
-                    }
-                }
-                Ok(_) => {
-                    // Other events, ignore
-                }
-                Err(e) => {
-                    // Non-critical error, continue recording
-                    eprintln!("⚠️  Key read error: {} (continuing...)", e);
-                }
-            }
-        }
-        
-        // Small sleep to prevent CPU spinning and allow audio buffering
-        std::thread::sleep(Duration::from_millis(10));
+    // Record continuously until stop_flag is set
+    while !stop_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        std::thread::sleep(Duration::from_millis(100));
     }
-
+    
+    // Stop recording
     drop(stream);
+
+    // Small delay to ensure all audio data is written
+    std::thread::sleep(Duration::from_millis(200));
 
     // Finalize WAV file
     {

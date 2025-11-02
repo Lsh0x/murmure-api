@@ -1,14 +1,14 @@
-# Rust Push-to-Talk Streaming Client
+# Rust Toggle Recording Client
 
-A push-to-talk client: press and hold **SPACE** to record, release to stop and transcribe. Perfect for precise control over recording.
+A toggle recording client: press **SPACE** to start recording, press **SPACE** again to stop and transcribe. Simple and intuitive!
 
 ## Features
 
-- 🎤 **Push-to-Talk**: Press and hold SPACE to record
-- 🛑 **Release to transcribe**: Release SPACE to stop and transcribe
+- 🎤 **Toggle Recording**: Press SPACE to start, press again to stop
 - 📡 Real-time transcription using streaming gRPC
 - 📝 Accumulates full conversation transcript
-- ⌨️ Simple keyboard controls (SPACE for record, Ctrl+C to exit)
+- ⌨️ Simple keyboard controls (SPACE to toggle, Ctrl+C to exit)
+- 🚫 No freeze issues - recording runs in background thread
 
 ## Prerequisites
 
@@ -59,24 +59,23 @@ cargo run --example rust_streaming_client -- --server http://localhost:50052
 
 ### Controls
 
-- **Hold SPACE** - Start recording audio
-- **Release SPACE** - Stop recording and transcribe
+- **Press SPACE** - Start recording (if not recording) or stop and transcribe (if recording)
 - **Ctrl+C** - Exit and show full conversation transcript
 - **ESC** - Exit immediately
 
 ## How It Works
 
-1. **Press SPACE** - Starts recording audio from your microphone
-2. **Hold SPACE** - Continues recording while you speak
-3. **Release SPACE** - Stops recording and sends audio to server
+1. **First SPACE press** - Starts recording audio from your microphone
+2. **Speak** - Record your message while recording is active
+3. **Second SPACE press** - Stops recording and sends audio to server
 4. **Transcription** - Server processes and returns transcription
-5. **Repeat** - Press SPACE again for the next recording
+5. **Repeat** - Press SPACE again to start the next recording
 6. **Exit** - Press Ctrl+C to see full conversation transcript
 
 ## Example Output
 
 ```
-🎙️  Murmure Push-to-Talk Streaming Client
+🎙️  Murmure Toggle Recording Client
 Server: http://localhost:50051
 
 📱 Device: MacBook Pro Microphone
@@ -86,15 +85,18 @@ Server: http://localhost:50051
 📡 Connecting to server...
 ✅ Connected to server
 
-🎤 Push-to-Talk Mode
-   Hold SPACE to record, release to transcribe
+🎤 Toggle Recording Mode
+   Press SPACE to start recording
+   Press SPACE again to stop and transcribe
    Press Ctrl+C to exit
 
-🎙️  Recording #1 (hold SPACE)...
+🎙️  Recording #1 started (press SPACE again to stop)...
+   ⏹️  Stopping recording...
    📤 Sending to server for transcription...
 ✅ Transcription: Hello, this is my first message.
 
-🎙️  Recording #2 (hold SPACE)...
+🎙️  Recording #2 started (press SPACE again to stop)...
+   ⏹️  Stopping recording...
    📤 Sending to server for transcription...
 ✅ Transcription: And this is my second message.
 
@@ -103,10 +105,11 @@ Server: http://localhost:50051
 Hello, this is my first message. And this is my second message.
 ```
 
-## Push-to-Talk Benefits
+## Toggle Mode Benefits
 
-- **Precise control** - Record exactly what you want to say
-- **No partial sentences** - Complete thoughts before transcription
+- **Simple controls** - Just press SPACE twice (start/stop)
+- **No freeze issues** - Recording runs in background thread
+- **Complete control** - Record exactly what you want to say
 - **Natural pauses** - Take breaks between recordings
 - **Better accuracy** - Full sentences improve transcription quality
 

@@ -36,7 +36,7 @@ See [README_RUST_CLIENT.md](README_RUST_CLIENT.md) for complete documentation.
 
 ## Rust Streaming Client ⭐ NEW!
 
-A continuous streaming client for real-time conversation transcription.
+A toggle recording client: press SPACE to start, press again to stop and transcribe.
 
 ### Quick Start
 
@@ -47,10 +47,10 @@ cargo run --example rust_streaming_client
 
 ### Features
 
-- Records audio continuously in chunks
-- Real-time transcription updates
+- Toggle recording with SPACE key
+- Real-time transcription
 - Accumulates full conversation transcript
-- Press Ctrl+C to stop and view full transcript
+- No freeze issues - background recording
 
 ### Usage
 

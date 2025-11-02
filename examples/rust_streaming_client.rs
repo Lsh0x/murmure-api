@@ -26,7 +26,7 @@
 //! See README_STREAMING_CLIENT.md for detailed documentation.
 
 use std::sync::Arc;
-use std::sync::atomic;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut chunk_counter = 0;
     
     // Handle Ctrl+C gracefully with a shared flag
-    let shutdown_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     
     tokio::spawn(async move {
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Create request stream for this chunk
-        let (mut chunk_tx, chunk_rx) = mpsc::channel(128);
+        let (chunk_tx, chunk_rx) = mpsc::channel(128);
         let chunk_data = audio_data;
         
         // Split into smaller chunks for streaming

@@ -181,7 +181,7 @@ Bulgarian (bg), Croatian (hr), Czech (cs), Danish (da), Dutch (nl), English (en)
 
 - **[Server Guide](docs/SERVER.md)** - Complete guide to the standalone gRPC server, including setup, configuration, Docker deployment, and API reference
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get the server running in 5 minutes
-- **[API Usage](docs/API_USAGE.md)** - Detailed API documentation and usage examples
+- **[gRPC Clients Guide](docs/GRPC_CLIENTS.md)** - How to generate gRPC clients in Node.js, Python, Rust, Go, Java, C# and more
 
 ### Example Clients
 

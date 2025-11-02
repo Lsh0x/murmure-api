@@ -1,2 +1,0 @@
-tonic::Request<futures::stream::Iter<std::iter::Chain<std::iter::Map<std::vec::IntoIter<Vec<u8>>, {closure@rust_file_client.rs:138:62: 138:69}>, futures::stream::Once<{async block@rust_file_client.rs:142:27: 142:32}>>>>
-tonic::Request<futures::stream::Iter<std::iter::Chain<std::iter::Map<std::vec::IntoIter<Vec<u8>>, {closure@rust_file_client.rs:138:62: 138:69}>, futures::stream::Once<{async block@rust_file_client.rs:142:27: 142:32}>>>>: IntoStreamingRequest

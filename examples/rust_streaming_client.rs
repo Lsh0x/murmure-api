@@ -130,11 +130,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         recording_count += 1;
                         println!("🎙️  Recording #{} (hold SPACE)...", recording_count);
                         
-                        // Record until space is released
-                        let audio_data = record_until_key_release(&device, &config)?;
+                        // Record until space is released (blocking, but in async context)
+                        let audio_data = match tokio::task::spawn_blocking({
+                            let device = device.clone();
+                            let config = config.clone();
+                            move || record_until_key_release(&device, &config)
+                        }).await {
+                            Ok(Ok(data)) => data,
+                            Ok(Err(e)) => {
+                                eprintln!("❌ Recording error: {}", e);
+                                continue;
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Task error: {}", e);
+                                continue;
+                            }
+                        };
                         
                         if audio_data.is_empty() {
-                            println!("⚠️  No audio recorded (too short or silent)");
+                            println!("⚠️  No audio recorded (too short or silent)\n");
                             continue;
                         }
 
@@ -228,7 +242,7 @@ async fn transcribe_audio(
 fn record_until_key_release(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     // Create temporary WAV file
     let temp_file = std::env::temp_dir().join(format!(
         "murmure-ptt-{}-{}.wav",
@@ -270,17 +284,31 @@ fn record_until_key_release(
         return Err(format!("❌ Failed to start recording: {}", e).into());
     }
 
-    // Record until space key is released
+    // Record until space key is released (non-blocking poll)
     loop {
-        if event::poll(Duration::from_millis(10))? {
-            if let Event::Key(key_event) = event::read()? {
-                if let KeyCode::Char(' ') = key_event.code {
-                    if key_event.kind == KeyEventKind::Release {
-                        break; // Space released, stop recording
+        // Poll for key events without blocking too long
+        let poll_timeout = Duration::from_millis(50);
+        if event::poll(poll_timeout)? {
+            match event::read() {
+                Ok(Event::Key(key_event)) => {
+                    if let KeyCode::Char(' ') = key_event.code {
+                        if key_event.kind == KeyEventKind::Release {
+                            break; // Space released, stop recording
+                        }
                     }
+                }
+                Ok(_) => {
+                    // Other events, ignore
+                }
+                Err(e) => {
+                    // Non-critical error, continue recording
+                    eprintln!("⚠️  Key read error: {} (continuing...)", e);
                 }
             }
         }
+        
+        // Small sleep to prevent CPU spinning and allow audio buffering
+        std::thread::sleep(Duration::from_millis(10));
     }
 
     drop(stream);

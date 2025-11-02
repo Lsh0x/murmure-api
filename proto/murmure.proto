@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package murmure;
+
+// Transcription service for speech-to-text
+service TranscriptionService {
+    // Transcribe a complete audio file (non-streaming)
+    rpc TranscribeFile(TranscribeFileRequest) returns (TranscribeFileResponse);
+    
+    // Bidirectional streaming for real-time audio transcription
+    rpc TranscribeStream(stream TranscribeStreamRequest) returns (stream TranscribeStreamResponse);
+}
+
+// Request for file-based transcription
+message TranscribeFileRequest {
+    // Audio data as bytes (WAV format, 16kHz, mono, 16-bit)
+    bytes audio_data = 1;
+    // Optional: Apply custom dictionary corrections
+    bool use_dictionary = 2;
+}
+
+// Response for file-based transcription
+message TranscribeFileResponse {
+    // Transcribed text
+    string text = 1;
+    // Success indicator
+    bool success = 2;
+    // Error message if transcription failed
+    string error = 3;
+}
+
+// Request for streaming transcription
+message TranscribeStreamRequest {
+    oneof request_type {
+        // Audio chunk data (WAV format, 16kHz, mono, 16-bit)
+        bytes audio_chunk = 1;
+        // Signal that streaming is complete
+        bool end_of_stream = 2;
+    }
+}
+
+// Response for streaming transcription
+message TranscribeStreamResponse {
+    oneof response_type {
+        // Partial transcription text
+        string partial_text = 1;
+        // Final transcription text (sent when stream ends)
+        string final_text = 2;
+        // Error message
+        string error = 3;
+    }
+    // Indicates if this is a final result
+    bool is_final = 4;
+}
+

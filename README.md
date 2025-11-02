@@ -1,119 +1,203 @@
-# Murmure
+# Murmure gRPC Server
 
-A privacy-first, open-source speech-to-text application that runs entirely on your machine, powered by a neural network via NVIDIA’s Parakeet model for fast, local transcription. Murmure turns your voice into text with no internet connection and zero data collection, and supports 25 European languages.
+A standalone gRPC server implementation of the [Murmure](https://github.com/Kieirra/murmure) speech-to-text application. This server allows you to run Murmure as a service that can be deployed locally or in the cloud (Docker, Kubernetes, AWS, etc.).
 
-Learn more on the on the [official website](https://murmure.al1x-ai.com/).
-
-![demo](public/murmure-screenshot-beautiful.png)
+> **Note**: This repository contains a gRPC server extracted from the original Murmure desktop application. For the desktop application installation and usage, see the [official Murmure repository](https://github.com/Kieirra/murmure).
 
 ## Features
 
-- **Privacy First**: All processing happens locally on your device. No data ever leaves your computer.
-- **No Telemetry**: Zero tracking, zero analytics. Your data stays yours, always.
-- **Open Source**: Free and open source software. Inspect, modify, and contribute.
-- **Powered by Parakeet**: NVIDIA’s state-of-the-art speech recognition model runs entirely on-device for fast, low-latency transcription.
+- **gRPC API** with bidirectional streaming support
+- **Real-time transcription** via streaming audio
+- **Custom dictionary** support for phonetic correction
+- **Docker-ready** for easy deployment
+- **Privacy First**: All processing happens locally on your device. No data ever leaves your server.
+- **Powered by Parakeet**: NVIDIA's state-of-the-art speech recognition model runs entirely on-device
 
-## Supported Languages:
+## Quick Start
+
+### Prerequisites
+
+- **Rust** (1.75+) - [Install Rust](https://www.rust-lang.org/tools/install)
+- **Protocol Buffers Compiler** - `protoc` (for building from source)
+  - macOS: `brew install protobuf`
+  - Ubuntu/Debian: `sudo apt-get install protobuf-compiler`
+  - Windows: Download from [protobuf releases](https://github.com/protocolbuffers/protobuf/releases)
+
+### 1. Download the Model
+
+Download the Parakeet model (required):
+
+```bash
+# Create resources directory
+mkdir -p resources
+
+# Download and extract model
+cd resources
+curl -L -o /tmp/parakeet-model.zip \
+  "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip"
+unzip /tmp/parakeet-model.zip
+rm /tmp/parakeet-model.zip
+cd ..
+```
+
+You should now have `resources/parakeet-tdt-0.6b-v3-int8/` directory.
+
+### 2. Configure Environment
+
+Copy the example environment file and modify as needed:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` to set your paths:
+
+```bash
+MURMURE_MODEL_PATH=./resources/parakeet-tdt-0.6b-v3-int8
+MURMURE_CC_RULES_PATH=./resources/cc-rules
+MURMURE_GRPC_PORT=50051
+MURMURE_LOG_LEVEL=info
+```
+
+### 3. Build and Run the Server
+
+```bash
+cd src-tauri
+cargo build --release --bin murmure-server
+```
+
+Run the server:
+
+```bash
+# Load environment variables and run
+export $(cat ../.env | xargs)
+./target/release/murmure-server
+```
+
+Or use environment variables directly:
+
+```bash
+export MURMURE_MODEL_PATH=./resources/parakeet-tdt-0.6b-v3-int8
+export MURMURE_CC_RULES_PATH=./resources/cc-rules
+./target/release/murmure-server
+```
+
+The server will start and listen on port 50051 (or your configured port).
+
+### 4. Run Example Clients
+
+#### Rust Streaming Client (Recommended)
+
+Toggle recording mode: press SPACE to start, press again to stop and transcribe.
+
+```bash
+cd examples
+cargo run --example rust_streaming_client
+```
+
+#### Rust Recording Client
+
+Record audio from microphone for a fixed duration:
+
+```bash
+cd examples
+cargo run --example rust_record_client -- --duration 5
+```
+
+#### Rust File Client
+
+Transcribe audio files from disk:
+
+```bash
+cd examples
+cargo run --example rust_file_client -- audio.wav
+```
+
+#### Python Client
+
+```bash
+cd examples
+pip install grpcio grpcio-tools
+python -m grpc_tools.protoc -I../proto --python_out=. --grpc_python_out=. ../proto/murmure.proto
+python python_client.py audio.wav
+```
+
+## Docker Deployment
+
+### Using Docker Compose (Recommended)
+
+1. Ensure you have the Parakeet model in `resources/parakeet-tdt-0.6b-v3-int8/`
+2. Ensure you have cc-rules in `resources/cc-rules/`
+
+```bash
+docker-compose up
+```
+
+The server will start on port 50051.
+
+### Using Dockerfile
+
+```bash
+docker build -t murmure-server .
+docker run -p 50051:50051 \
+  -e MURMURE_MODEL_PATH=/app/resources/parakeet-tdt-0.6b-v3-int8 \
+  -e MURMURE_CC_RULES_PATH=/app/resources/cc-rules \
+  -e MURMURE_GRPC_PORT=50051 \
+  murmure-server
+```
+
+## Configuration
+
+### Environment Variables
+
+- `MURMURE_MODEL_PATH` - Path to Parakeet model directory (required)
+- `MURMURE_CC_RULES_PATH` - Path to cc-rules directory (required)
+- `MURMURE_DICTIONARY` - JSON array of custom dictionary words (optional)
+  - Example: `MURMURE_DICTIONARY='["John Doe", "Jane Smith"]'`
+- `MURMURE_GRPC_PORT` - gRPC server port (default: 50051)
+- `MURMURE_LOG_LEVEL` - Logging level (default: info)
+
+### Config File (Optional)
+
+Create `config.json`:
+
+```json
+{
+  "model_path": "/path/to/model",
+  "cc_rules_path": "/path/to/cc-rules",
+  "dictionary": ["word1", "word2"],
+  "grpc_port": 50051,
+  "log_level": "info"
+}
+```
+
+## Supported Languages
 
 Bulgarian (bg), Croatian (hr), Czech (cs), Danish (da), Dutch (nl), English (en), Estonian (et), Finnish (fi), French (fr), German (de), Greek (el), Hungarian (hu), Italian (it), Latvian (lv), Lithuanian (lt), Maltese (mt), Polish (pl), Portuguese (pt), Romanian (ro), Slovak (sk), Slovenian (sl), Spanish (es), Swedish (sv), Russian (ru), Ukrainian (uk)
 
-## Installation
+## 📚 Documentation
 
-### Windows (Official)
+### Server Documentation
 
-⚠️ Windows SmartScreen : This installer is **not signed with a commercial certificate** (which costs ~€200–€500/year).  
-If you downloaded it from our **official GitHub releases**, you can safely continue.
+- **[Server Guide](docs/SERVER.md)** - Complete guide to the standalone gRPC server, including setup, configuration, Docker deployment, and API reference
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get the server running in 5 minutes
+- **[API Usage](docs/API_USAGE.md)** - Detailed API documentation and usage examples
 
-🛡️ We guarantee the installer is safe, contains **no malware**, and you can verify the source code or even compile it yourself if you prefer.
+### Example Clients
 
-1. Download murmure_{version}_x64_en-US.msi from the [release](https://github.com/Kieirra/murmure/releases) page
-2. Run the installer and follow the setup wizard.
+- **[Examples Overview](docs/examples/README.md)** - Overview of all available client examples
+- **[Rust Recording Client](docs/examples/README_RUST_CLIENT.md)** - Record audio from microphone and transcribe
+- **[Rust Streaming Client](docs/examples/README_STREAMING_CLIENT.md)** - Toggle recording for conversational transcription
+- **[Rust File Client](docs/examples/README_RUST_FILE_CLIENT.md)** - Transcribe audio files from disk
+- **[Quick Usage Guide](docs/examples/USAGE.md)** - Quick reference for all example clients
 
-### Linux (Official)
+### Original Project
 
-⚠️ Murmure doesn’t work well on Wayland-based distributions (except Fedora, which has no issues). It seems to be a problem related to the Tauri framework I used, and being on X11 doesn’t make it easy for me to fix the issue.
-
-1. Download murmure_{version}_amd64.AppImage from [release](https://github.com/Kieirra/murmure/releases) page
-2. Make it executable: `chmod +x murmure-x86_64.AppImage`
-3. Run the AppImage.
-
-Murmure uses the [ALSA](https://www.alsa-project.org/wiki/Main_Page) API to
-access your microphone, so if you're running Pipewire for your audio stack,
-make sure that the ALSA API calls are routed through it (e.g. by installing
-[the `pipewire-alsa`
-package](https://archlinux.org/packages/extra/x86_64/pipewire-alsa/) on Arch
-Linux), otherwise you'll have errors such as `ALSA lib
-pcm_dsnoop.c:567:(snd_pcm_dsnoop_open) unable to open slave`.
-
-#### Arch Linux (Community)
-
-⚠️ Community builds are maintained by kind contributors on a best-effort basis.
-They do their best to keep them up to date, but there’s no guarantee they will always be.
-If you encounter a bug with one of these packages, please open an issue in the corresponding community repository instead.
-
-Community repository: https://github.com/Horgix/aur-package_murmure_mirror
-
-On Arch Linux, you can install [the `murmure` package directly from the
-AUR](https://aur.archlinux.org/packages/murmure) using your favorite helper:
-
-```sh
-aura -A murmure
-# Or
-yay -S murmure
-# Or
-paru -S murmure
-```
-
-## Usage
-
-Murmure provides a clean and focused speech-to-text experience.
-Once launched, simply start recording your voice. The text appears instantly, processed directly on your computer.
-
-Typical use cases include:
-
-- Dictating to any AI prompt (Cursor, ChatGPT, Mistral, etc.)
-- Writing notes hands-free
-- Capturing creative ideas or dictation
-
-Because all computation is local, no network connection is required.
+- **[Official Murmure Repository](https://github.com/Kieirra/murmure)** - The original desktop application
 
 ## Technology
 
-Murmure uses NVIDIA’s Parakeet TDT, a highly optimized, experimental transformer-based speech recognition model designed for low-latency, on-device inference. It combines fast transcription with strong accuracy across multiple languages, running efficiently on consumer GPUs or CPUs.
-
-## Changelog
-
-| Version       | Date       | Notes                                                                                                                                                                                                                                                                    |
-| ------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `1.4.0`       | 2025-11-01 | **🐛 Bug Fixes**<br>- Second transcription losing cursor focus and sometimes not working properly.<br>- Minor UI change on long shortcut in Settings<br><br>**✨ New Features**<br>- Click on history, save it in clipboard<br>- Add a button to clear transcription history<br>- Add option in Settings to keep the transcription in clipboard |
-| `1.3.0`       | 2025-10-25 | **🐛 Bug Fixes**<br>- Fixed small memory leak<br>- Fixed the unwanted \"v\" key activation when assigning shortcuts<br>- Corrected the GitHub link<br><br>**✨ New Features**<br>- Added an experimental API allowing Murmure to connect with external software _(can be enabled in Settings → System)_<br>- Improved shortcut UI for better usability<br>- Removed the experimental tag for the Linux AppImage. It now works identically to the Windows version (users who had the experimental version need to reinstall it to benefit from the "check for updates" feature) |
-| `1.2.1`       | 2025-10-17 | Fix overlay position + check for updates button + signed msi + Linux experimental AppImage                                                                                                                                                                               |
-| `1.2.0-alpha` | 2025-10-14 | Add Overlay                                                                                                                                                                                                                                                              |
-| `1.1.0-alpha` | 2025-10-13 | Add 'Past last transcript' shortcut                                                                                                                                                                                                                                      |
-| `1.0.0-alpha` | 2025-10-13 | Initial version                                                                                                                                                                                                                                                          |
-## 🗺️ Roadmap 
-
-- [ ] (1.5.0) fix: Improve available shortcuts on Linux 
-- [ ] (1.5.0) fix: Display the overlay on the active screen  
-- [ ] (1.5.0) fix: Scale overlay based on screen DPI or add a zoom option
-- [ ] (1.5.0) fix: restart application after uploading to new version
-- [ ] (1.5.0) feat: Add keyboard shortcuts to start and stop recording (outside push-to-talk mode)  
-- [ ] fix: the visualizer does not always reset at the end of a transcription  
-- [ ] feat: Settings option to not store history at all  
-- [ ] feat: API(Webhook) - Send an HTTP request after `CTRL + SPACE`, opens up many interesting possibilities  
-- [ ] feat: Allow uploading an audio file and outputting a `.txt` transcript  
-- [ ] feat: Allow selecting the input microphone 
-- [ ] feat: Create an API to fetch the latest transcription  
-- [ ] fix: Improve the custom dictionary algorithm  
-- [ ] feat: Support MP3 files in addition to WAV (since some recorders use MP3)  
-- [ ] docs: Add benchmarking vs Whisper and Plaud: identify where the model performs best (microphone speech, conference, meeting) and test potential optimizations  
-- [ ] **Major:** Add real-time streaming (POC) 
-- [ ] **Major:** Integrate an LLM to enhance or modify transcriptions (post-processing)  
-- [ ] **Major:** Implement a plugin system  
-
-## Acknowledgments
-
-- Thanks to NVIDIA for the Parakeet TDT model, Tauri for being an amazing tool, and to the open‑source community for their tools and libraries.
+Murmure uses NVIDIA's Parakeet TDT, a highly optimized, experimental transformer-based speech recognition model designed for low-latency, on-device inference. It combines fast transcription with strong accuracy across multiple languages, running efficiently on consumer GPUs or CPUs.
 
 ## License
 
@@ -124,8 +208,7 @@ You can inspect, modify, and redistribute it freely as long as derivative works 
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-Reporting issues is done [on GitHub](https://github.com/Kieirra/murmure/issues/new).
+## Acknowledgments
 
-## Support Development
-
-If you like Murmure and want to support its development: [Support on Tipeee](https://fr.tipeee.com/murmure-al1x-ai/)
+- Thanks to [NVIDIA](https://www.nvidia.com/) for the Parakeet TDT model
+- Thanks to the [original Murmure project](https://github.com/Kieirra/murmure) for the excellent desktop application

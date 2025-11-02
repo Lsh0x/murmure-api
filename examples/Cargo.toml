@@ -1,0 +1,32 @@
+[package]
+name = "murmure-examples"
+version = "0.1.0"
+edition = "2021"
+
+[[example]]
+name = "rust_record_client"
+path = "rust_record_client.rs"
+
+[[example]]
+name = "rust_file_client"
+path = "rust_file_client.rs"
+
+[[example]]
+name = "rust_streaming_client"
+path = "rust_streaming_client.rs"
+
+[dependencies]
+tonic = "0.12"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+cpal = "0.16"
+hound = "3.5"
+prost = "0.13"
+prost-types = "0.13"
+anyhow = "1.0"
+futures = "0.3"
+crossterm = "0.28"
+
+[build-dependencies]
+tonic-build = { version = "0.12", features = ["prost"] }
+

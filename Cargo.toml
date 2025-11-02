@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "murmure-lib",
+    "murmure-server",
+    "examples",
+]
+resolver = "2"
+
+[workspace.dependencies]
+# Common dependencies can be shared here if needed
+# For now, each crate manages its own dependencies
+

@@ -5,6 +5,12 @@ description = "gRPC server for Murmure speech-to-text"
 authors = ["al1x-ai.com"]
 edition = "2021"
 
+# Explicitly declare the binary target so cargo metadata works during
+# cargo-chef prepare (when src files aren't copied yet).
+[[bin]]
+name = "murmure-server"
+path = "src/main.rs"
+
 [dependencies]
 murmure-lib = { path = "../murmure-lib" }
 anyhow = "1.0"
@@ -18,4 +24,3 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [build-dependencies]
 tonic-build = { version = "0.12", features = ["prost"] }
-

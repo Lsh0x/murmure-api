@@ -4,7 +4,7 @@ services:
   murmure-server:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: murmure-server/Dockerfile
     container_name: murmure-server
     ports:
       - "50051:50051"

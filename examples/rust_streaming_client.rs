@@ -38,6 +38,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
+use std::io::{self, Write};
 
 // Include generated proto code from build script
 pub mod murmure {
@@ -139,11 +140,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Event::Key(key_event) = event::read()? {
                 match key_event.code {
                     KeyCode::Char(' ') if key_event.kind == KeyEventKind::Press => {
+                        // Temporarily disable raw mode for cleaner output
+                        disable_raw_mode()?;
+                        
                         if !is_recording {
                             // Start recording
                             recording_count += 1;
                             is_recording = true;
-                            println!("🎙️  Recording #{} started (press SPACE again to stop)...", recording_count);
+                            println!("\n🎙️  Recording #{} started (press SPACE again to stop)...", recording_count);
+                            io::stdout().flush()?;
+                            
+                            // Re-enable raw mode
+                            enable_raw_mode()?;
                             
                             // Create stop flag
                             let stop_flag = Arc::new(AtomicBool::new(false));
@@ -163,7 +171,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         } else {
                             // Stop recording
                             is_recording = false;
-                            println!("   ⏹️  Stopping recording...");
+                            println!("\n   ⏹️  Stopping recording...");
+                            io::stdout().flush()?;
                             
                             // Signal stop
                             if let Some(flag) = recording_stop_flag.take() {
@@ -175,38 +184,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 let audio_data = match handle.await {
                                     Ok(Ok(data)) => data,
                                     Ok(Err(e)) => {
-                                        eprintln!("❌ Recording error: {}", e);
+                                        eprintln!("\n❌ Recording error: {}", e);
+                                        enable_raw_mode()?;
                                         continue;
                                     }
                                     Err(e) => {
-                                        eprintln!("❌ Task error: {}", e);
+                                        eprintln!("\n❌ Task error: {}", e);
+                                        enable_raw_mode()?;
                                         continue;
                                     }
                                 };
                                 
                                 if audio_data.is_empty() {
                                     println!("⚠️  No audio recorded (too short or silent)\n");
+                                    enable_raw_mode()?;
                                     continue;
                                 }
 
-                                println!("   📤 Sending to server for transcription...");
+                                print!("   📤 Sending to server for transcription...");
+                                io::stdout().flush()?;
 
                                 // Transcribe the audio
                                 match transcribe_audio(&mut client, audio_data).await {
                                     Ok(text) => {
                                         if !text.trim().is_empty() {
-                                            println!("✅ Transcription: {}\n", text);
+                                            println!("\r   ✅ Transcription #{}: {}", recording_count, text);
+                                            println!();
                                             conversation_text.push_str(&text);
                                             conversation_text.push(' ');
                                         } else {
-                                            println!("⚠️  Empty transcription\n");
+                                            println!("\r   ⚠️  Empty transcription\n");
                                         }
+                                        io::stdout().flush()?;
                                     }
                                     Err(e) => {
-                                        eprintln!("❌ Transcription error: {}\n", e);
+                                        println!("\r   ❌ Transcription error: {}\n", e);
+                                        io::stdout().flush()?;
                                     }
                                 }
                             }
+                            
+                            // Re-enable raw mode
+                            enable_raw_mode()?;
                         }
                     }
                     KeyCode::Esc => {

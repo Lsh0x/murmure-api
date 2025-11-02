@@ -34,8 +34,8 @@ export MURMURE_GRPC_PORT=50051
 
 2. Build and run:
 ```bash
-cd src-tauri
-cargo build --release --bin murmure-server
+cd murmure-server
+cargo build --release
 ./target/release/murmure-server
 ```
 

@@ -23,7 +23,7 @@ The Murmure gRPC server has been successfully extracted and builds correctly.
 ### 1. Test Server Startup
 
 ```bash
-cd src-tauri
+cd murmure-lib
 export MURMURE_MODEL_PATH=/path/to/parakeet-tdt-0.6b-v3-int8
 export MURMURE_CC_RULES_PATH=/path/to/cc-rules
 ./target/debug/murmure-server

@@ -62,8 +62,8 @@ MURMURE_LOG_LEVEL=info
 ### 3. Build and Run the Server
 
 ```bash
-cd src-tauri
-cargo build --release --bin murmure-server
+cd murmure-server
+cargo build --release
 ```
 
 Run the server:

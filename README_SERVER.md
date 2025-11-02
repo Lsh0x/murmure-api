@@ -51,8 +51,8 @@ MURMURE_LOG_LEVEL=info
 ### 3. Build the Server
 
 ```bash
-cd src-tauri
-cargo build --release --bin murmure-server
+cd murmure-server
+cargo build --release
 ```
 
 The binary will be at `target/release/murmure-server`.

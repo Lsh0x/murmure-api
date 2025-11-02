@@ -1,4 +1,4 @@
-use crate::transcription::TranscriptionService;
+use murmure_lib::transcription::TranscriptionService;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -10,7 +10,7 @@ pub mod murmure {
 }
 
 use murmure::{
-    transcription_service_server, TranscribeFileRequest, TranscribeFileResponse,
+    TranscribeFileRequest, TranscribeFileResponse,
     TranscribeStreamRequest, TranscribeStreamResponse,
 };
 

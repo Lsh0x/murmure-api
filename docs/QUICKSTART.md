@@ -41,8 +41,8 @@ export MURMURE_LOG_LEVEL=info
 ## Step 3: Build the Server
 
 ```bash
-cd src-tauri
-cargo build --release --bin murmure-server
+cd murmure-server
+cargo build --release
 ```
 
 This will create `target/release/murmure-server`.

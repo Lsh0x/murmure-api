@@ -4,12 +4,9 @@ use crate::engine::{
 };
 use crate::model::Model;
 use crate::config::ServerConfig;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use hound;
 use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-use std::path::PathBuf;
-use std::sync::Arc;
 
 static ENGINE: Lazy<parking_lot::Mutex<Option<ParakeetEngine>>> =
     Lazy::new(|| parking_lot::Mutex::new(None));
@@ -82,7 +79,7 @@ pub fn preload_engine(model: &Model) -> Result<()> {
 
 pub fn transcribe_audio(
     audio_path: &std::path::Path,
-    model: &Model,
+    _model: &Model,
     dictionary: Option<&Dictionary>,
     config: &ServerConfig,
 ) -> Result<String> {

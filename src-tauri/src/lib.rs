@@ -1,9 +1,9 @@
 mod audio;
-mod config;
-mod dictionary;
+pub mod config;
+pub mod dictionary;
 mod engine;
-mod model;
-mod transcription;
+pub mod model;
+pub mod transcription;
 pub mod server;
 
 // Server-only modules (always compiled)

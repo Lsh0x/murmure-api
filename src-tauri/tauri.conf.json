@@ -4,10 +4,6 @@
     "version": "1.4.0",
     "identifier": "com.al1x-ai.murmure",
     "build": {
-        "beforeDevCommand": "pnpm dev",
-        "devUrl": "http://localhost:1420",
-        "beforeBuildCommand": "pnpm build",
-        "frontendDist": "../dist"
     },
     "app": {
         "windows": [

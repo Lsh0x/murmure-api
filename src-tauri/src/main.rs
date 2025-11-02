@@ -1,14 +1,32 @@
-use murmure_lib::*;
-use murmure_lib::server::grpc::murmure;
 use std::sync::Arc;
 use tokio::signal;
+#[cfg(unix)]
+use tokio::signal::unix::SignalKind;
 use tonic::transport::Server;
 use tracing::{info, error};
 
+// Import from the library crate - use re-exports from lib.rs
+// The re-exports make these types available at the crate root
+// extern crate not needed in Rust 2018+
+
+// These are re-exported in lib.rs with pub use
+use murmure_lib::config::ServerConfig;
+use murmure_lib::dictionary::Dictionary;
+use murmure_lib::model::Model;
+use murmure_lib::transcription::TranscriptionService;
+// TranscriptionServiceImpl is re-exported at server level
+use murmure_lib::server::grpc::TranscriptionServiceImpl;
+// murmure is re-exported from server (which re-exports from grpc)
+use murmure_lib::server::grpc::murmure;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging
+    // Print to stderr immediately to ensure we see output even if logging fails
+    eprintln!("[DEBUG] Starting Murmure server...");
+    
+    // Initialize logging - ensure output goes to stdout
     tracing_subscriber::fmt()
+        .with_writer(std::io::stdout)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
@@ -18,15 +36,25 @@ async fn main() -> anyhow::Result<()> {
     info!("Starting Murmure gRPC Server...");
 
     // Load configuration
-    let config = Arc::new(ServerConfig::from_env()?);
-    info!("Configuration loaded: gRPC port = {}", config.grpc_port);
+    let config = match ServerConfig::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to load configuration: {}", e);
+            return Err(e);
+        }
+    };
+    let config = Arc::new(config);
+    info!("Configuration loaded: gRPC port = {}", (*config).grpc_port);
 
     // Initialize model
+    eprintln!("[DEBUG] Checking model availability...");
     let model = Arc::new(Model::new((*config).clone()));
     if !model.is_available() {
+        eprintln!("[ERROR] Model is not available. Ensure MURMURE_MODEL_PATH is set correctly.");
         error!("Model is not available. Please ensure MURMURE_MODEL_PATH is set correctly.");
         anyhow::bail!("Model not available");
     }
+    eprintln!("[DEBUG] Model is available");
     info!("Model initialized");
 
     // Initialize dictionary (optional)
@@ -50,7 +78,9 @@ async fn main() -> anyhow::Result<()> {
     let grpc_service = TranscriptionServiceImpl::new(transcription_service);
 
     // Create gRPC server
+    eprintln!("[DEBUG] Creating gRPC server...");
     let addr = format!("0.0.0.0:{}", config.grpc_port).parse()?;
+    eprintln!("[DEBUG] gRPC server will listen on {}", addr);
     info!("gRPC server listening on {}", addr);
 
     Server::builder()
@@ -60,14 +90,25 @@ async fn main() -> anyhow::Result<()> {
             ),
         )
         .serve_with_shutdown(addr, async {
-            // Wait for shutdown signal
-            match signal::ctrl_c().await {
-                Ok(()) => {
-                    info!("Shutdown signal received");
+            eprintln!("[DEBUG] Server started, waiting for shutdown signal...");
+            // Wait for shutdown signal (SIGTERM for Docker, SIGINT for Ctrl+C)
+            #[cfg(unix)]
+            {
+                let mut sigterm = tokio::signal::unix::signal(SignalKind::terminate())
+                    .expect("Failed to install SIGTERM handler");
+                tokio::select! {
+                    _ = signal::ctrl_c() => {
+                        info!("SIGINT received, shutting down gracefully");
+                    }
+                    _ = sigterm.recv() => {
+                        info!("SIGTERM received, shutting down gracefully");
+                    }
                 }
-                Err(err) => {
-                    error!("Unable to listen for shutdown signal: {}", err);
-                }
+            }
+            #[cfg(not(unix))]
+            {
+                signal::ctrl_c().await.expect("Failed to listen for shutdown signal");
+                info!("Shutdown signal received");
             }
         })
         .await?;

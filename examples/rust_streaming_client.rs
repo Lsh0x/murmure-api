@@ -1,7 +1,7 @@
-//! Streaming Conversation Client for Murmure gRPC Server
+//! Push-to-Talk Streaming Client for Murmure gRPC Server
 //!
-//! This client records audio continuously and sends it to the server in real-time,
-//! receiving partial transcriptions as the conversation progresses.
+//! This client uses push-to-talk mode: press and hold SPACE to record,
+//! release to stop and transcribe. Perfect for precise control over recording.
 //!
 //! ## Usage
 //!
@@ -17,11 +17,13 @@
 //! cargo run --example rust_streaming_client
 //! ```
 //!
-//! Press Ctrl+C to stop recording and exit.
+//! Controls:
+//! - Hold SPACE to record audio
+//! - Release SPACE to stop recording and transcribe
+//! - Press Ctrl+C to exit
 //!
 //! Options:
 //! - `--server <address>` - Server address (default: http://localhost:50051)
-//! - `--chunk-duration <seconds>` - Duration of each audio chunk sent to server (default: 2)
 //!
 //! See README_STREAMING_CLIENT.md for detailed documentation.
 
@@ -35,6 +37,8 @@ use std::fs::File;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 
 // Include generated proto code from build script
 pub mod murmure {
@@ -55,16 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(&"http://localhost:50051".to_string())
         .clone();
 
-    let chunk_duration = args
-        .iter()
-        .position(|a| a == "--chunk-duration")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(2);
-
-    println!("🎙️  Murmure Streaming Conversation Client");
-    println!("Server: {}", server_address);
-    println!("Chunk duration: {} seconds\n", chunk_duration);
+    println!("🎙️  Murmure Push-to-Talk Streaming Client");
+    println!("Server: {}\n", server_address);
 
     // Set up audio recording
     let host = cpal::default_host();
@@ -97,133 +93,145 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = TranscriptionServiceClient::connect(server_address.clone()).await?;
     println!("✅ Connected to server\n");
 
-    println!("🎤 Starting streaming conversation...");
-    println!("   Recording in {} second chunks", chunk_duration);
-    println!("   Press Ctrl+C to stop\n");
+    println!("🎤 Push-to-Talk Mode");
+    println!("   Hold SPACE to record, release to transcribe");
+    println!("   Press Ctrl+C to exit\n");
 
+    // Enable raw mode for key detection
+    enable_raw_mode()?;
 
     // Track conversation text
     let mut conversation_text = String::new();
+    let mut recording_count = 0;
 
-    // Stream audio chunks to server continuously
-    let mut chunk_counter = 0;
-    
-    // Handle Ctrl+C gracefully with a shared flag
+    // Handle Ctrl+C gracefully
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
         shutdown_flag_clone.store(true, std::sync::atomic::Ordering::Relaxed);
-        println!("\n\n🛑 Stopping streaming conversation...");
     });
 
     loop {
         // Check if Ctrl+C was pressed
         if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            disable_raw_mode()?;
             println!("\n📝 Conversation transcript:\n{}", conversation_text);
             break;
         }
 
-        chunk_counter += 1;
-        
-        // Record one chunk (blocking call)
-        let audio_data = record_audio_chunk(&device, &config, chunk_duration)?;
-        
-        if audio_data.is_empty() {
-            eprintln!("⚠️  Warning: Empty audio chunk, skipping...");
-            continue;
-        }
-
-        // Create request stream for this chunk
-        let (chunk_tx, chunk_rx) = mpsc::channel(128);
-        let chunk_data = audio_data;
-        
-        // Split into smaller chunks for streaming
-        tokio::spawn(async move {
-            let chunk_size = 16384; // 16KB chunks
-            for audio_chunk in chunk_data.chunks(chunk_size) {
-                if chunk_tx.send(TranscribeStreamRequest {
-                    request_type: Some(murmure::transcribe_stream_request::RequestType::AudioChunk(audio_chunk.to_vec())),
-                }).await.is_err() {
-                    return;
-                }
-            }
-            
-            // Send end of stream for this chunk
-            let _ = chunk_tx.send(TranscribeStreamRequest {
-                request_type: Some(murmure::transcribe_stream_request::RequestType::EndOfStream(true)),
-            }).await;
-        });
-
-        // Send chunk to server and process responses
-        let request = Request::new(ReceiverStream::new(chunk_rx));
-        let mut response_stream = match client.transcribe_stream(request).await {
-            Ok(stream) => stream.into_inner(),
-            Err(e) => {
-                eprintln!("❌ Failed to start stream: {}", e);
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                continue;
-            }
-        };
-
-        // Process responses for this chunk
-        while let Some(result) = response_stream.message().await.transpose() {
-            match result {
-                Ok(response) => {
-                    match response.response_type {
-                        Some(murmure::transcribe_stream_response::ResponseType::PartialText(text)) => {
-                            if !text.is_empty() {
-                                print!("\r   📝 Partial: {}", text);
-                                std::io::Write::flush(&mut std::io::stdout()).unwrap();
-                            }
+        // Wait for key press (non-blocking)
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key_event) = event::read()? {
+                match key_event.code {
+                    KeyCode::Char(' ') if key_event.kind == KeyEventKind::Press => {
+                        // Space pressed - start recording
+                        recording_count += 1;
+                        println!("🎙️  Recording #{} (hold SPACE)...", recording_count);
+                        
+                        // Record until space is released
+                        let audio_data = record_until_key_release(&device, &config)?;
+                        
+                        if audio_data.is_empty() {
+                            println!("⚠️  No audio recorded (too short or silent)");
+                            continue;
                         }
-                        Some(murmure::transcribe_stream_response::ResponseType::FinalText(text)) => {
-                            if !text.is_empty() {
-                                // Clear the partial text line
-                                print!("\r");
-                                for _ in 0..100 {
-                                    print!(" ");
+
+                        println!("   📤 Sending to server for transcription...");
+
+                        // Transcribe the audio
+                        match transcribe_audio(&mut client, audio_data).await {
+                            Ok(text) => {
+                                if !text.trim().is_empty() {
+                                    println!("✅ Transcription: {}\n", text);
+                                    conversation_text.push_str(&text);
+                                    conversation_text.push(' ');
+                                } else {
+                                    println!("⚠️  Empty transcription\n");
                                 }
-                                print!("\r");
-                                
-                                println!("✅ Chunk {}: {}", chunk_counter, text);
-                                conversation_text.push_str(&text);
-                                conversation_text.push(' ');
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Transcription error: {}\n", e);
                             }
                         }
-                        Some(murmure::transcribe_stream_response::ResponseType::Error(err)) => {
-                            eprintln!("\n❌ Error: {}", err);
-                        }
-                        None => {}
                     }
-
-                    if response.is_final {
+                    KeyCode::Esc => {
+                        // Escape key - exit
                         break;
                     }
-                }
-                Err(e) => {
-                    eprintln!("❌ Response error: {}", e);
-                    break;
+                    _ => {}
                 }
             }
         }
-
-        // Small delay before next chunk
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
+    disable_raw_mode()?;
     Ok(())
 }
 
-fn record_audio_chunk(
+async fn transcribe_audio(
+    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    audio_data: Vec<u8>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    // Create request stream
+    let (chunk_tx, chunk_rx) = mpsc::channel(128);
+    
+    // Send audio in chunks
+    tokio::spawn(async move {
+        let chunk_size = 16384; // 16KB chunks
+        for audio_chunk in audio_data.chunks(chunk_size) {
+            if chunk_tx.send(TranscribeStreamRequest {
+                request_type: Some(murmure::transcribe_stream_request::RequestType::AudioChunk(audio_chunk.to_vec())),
+            }).await.is_err() {
+                return;
+            }
+        }
+        
+        // Send end of stream
+        let _ = chunk_tx.send(TranscribeStreamRequest {
+            request_type: Some(murmure::transcribe_stream_request::RequestType::EndOfStream(true)),
+        }).await;
+    });
+
+    // Send to server
+    let request = Request::new(ReceiverStream::new(chunk_rx));
+    let mut response_stream = client.transcribe_stream(request).await?.into_inner();
+
+    // Process responses
+    let mut final_text = String::new();
+    while let Some(result) = response_stream.message().await.transpose() {
+        match result {
+            Ok(response) => {
+                match response.response_type {
+                    Some(murmure::transcribe_stream_response::ResponseType::FinalText(text)) => {
+                        final_text = text;
+                    }
+                    Some(murmure::transcribe_stream_response::ResponseType::Error(err)) => {
+                        return Err(format!("Server error: {}", err).into());
+                    }
+                    _ => {}
+                }
+                if response.is_final {
+                    break;
+                }
+            }
+            Err(e) => {
+                return Err(format!("Stream error: {}", e).into());
+            }
+        }
+    }
+
+    Ok(final_text)
+}
+
+fn record_until_key_release(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
-    duration_secs: u64,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // Create temporary WAV file
     let temp_file = std::env::temp_dir().join(format!(
-        "murmure-stream-{}-{}.wav",
+        "murmure-ptt-{}-{}.wav",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
@@ -262,8 +270,19 @@ fn record_audio_chunk(
         return Err(format!("❌ Failed to start recording: {}", e).into());
     }
 
-    // Record for specified duration
-    std::thread::sleep(Duration::from_secs(duration_secs));
+    // Record until space key is released
+    loop {
+        if event::poll(Duration::from_millis(10))? {
+            if let Event::Key(key_event) = event::read()? {
+                if let KeyCode::Char(' ') = key_event.code {
+                    if key_event.kind == KeyEventKind::Release {
+                        break; // Space released, stop recording
+                    }
+                }
+            }
+        }
+    }
+
     drop(stream);
 
     // Finalize WAV file
@@ -282,6 +301,7 @@ fn record_audio_chunk(
 
     Ok(audio_data)
 }
+
 
 type WavWriterType = WavWriter<BufWriter<File>>;
 

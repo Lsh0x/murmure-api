@@ -1,14 +1,14 @@
-# Rust Streaming Conversation Client
+# Rust Push-to-Talk Streaming Client
 
-A continuous streaming client that records audio in chunks and transcribes them in real-time, creating a conversation-like experience.
+A push-to-talk client: press and hold **SPACE** to record, release to stop and transcribe. Perfect for precise control over recording.
 
 ## Features
 
-- 🎤 Continuous audio recording in configurable chunks
+- 🎤 **Push-to-Talk**: Press and hold SPACE to record
+- 🛑 **Release to transcribe**: Release SPACE to stop and transcribe
 - 📡 Real-time transcription using streaming gRPC
-- 💬 Displays partial and final transcriptions as they arrive
-- 📝 Accumulates conversation transcript
-- 🛑 Graceful shutdown with Ctrl+C
+- 📝 Accumulates full conversation transcript
+- ⌨️ Simple keyboard controls (SPACE for record, Ctrl+C to exit)
 
 ## Prerequisites
 
@@ -49,36 +49,35 @@ cargo run --example rust_streaming_client
 ### Custom Options
 
 ```bash
-# Custom chunk duration (default: 2 seconds)
-cargo run --example rust_streaming_client -- --chunk-duration 3
-
 # Custom server address
-cargo run --example rust_streaming_client -- \
-  --server http://localhost:50052 \
-  --chunk-duration 2
+cargo run --example rust_streaming_client -- --server http://localhost:50052
 ```
 
 ### Options
 
 - `--server <address>` - Server address (default: http://localhost:50051)
-- `--chunk-duration <seconds>` - Duration of each audio chunk (default: 2)
 
-Press **Ctrl+C** to stop recording and see the full conversation transcript.
+### Controls
+
+- **Hold SPACE** - Start recording audio
+- **Release SPACE** - Stop recording and transcribe
+- **Ctrl+C** - Exit and show full conversation transcript
+- **ESC** - Exit immediately
 
 ## How It Works
 
-1. **Records audio in chunks** - Each chunk is a few seconds of audio (default: 2 seconds)
-2. **Sends chunk to server** - Uses `TranscribeStream` RPC for each chunk
-3. **Receives transcriptions** - Shows partial text (if available) and final transcription
-4. **Accumulates conversation** - Builds up a complete transcript of the conversation
-5. **Displays on exit** - Shows full conversation transcript when you stop with Ctrl+C
+1. **Press SPACE** - Starts recording audio from your microphone
+2. **Hold SPACE** - Continues recording while you speak
+3. **Release SPACE** - Stops recording and sends audio to server
+4. **Transcription** - Server processes and returns transcription
+5. **Repeat** - Press SPACE again for the next recording
+6. **Exit** - Press Ctrl+C to see full conversation transcript
 
 ## Example Output
 
 ```
-🎙️  Murmure Streaming Conversation Client
+🎙️  Murmure Push-to-Talk Streaming Client
 Server: http://localhost:50051
-Chunk duration: 2 seconds
 
 📱 Device: MacBook Pro Microphone
    Sample rate: 48000 Hz
@@ -87,29 +86,29 @@ Chunk duration: 2 seconds
 📡 Connecting to server...
 ✅ Connected to server
 
-🎤 Starting streaming conversation...
-   Recording in 2 second chunks
-   Press Ctrl+C to stop
+🎤 Push-to-Talk Mode
+   Hold SPACE to record, release to transcribe
+   Press Ctrl+C to exit
 
-✅ Chunk 1: Hello, this is the first part of the conversation.
-✅ Chunk 2: And this is the second part.
-✅ Chunk 3: The conversation continues in real-time.
+🎙️  Recording #1 (hold SPACE)...
+   📤 Sending to server for transcription...
+✅ Transcription: Hello, this is my first message.
+
+🎙️  Recording #2 (hold SPACE)...
+   📤 Sending to server for transcription...
+✅ Transcription: And this is my second message.
 
 ^C
-🛑 Stopping streaming conversation...
-
 📝 Conversation transcript:
-Hello, this is the first part of the conversation. And this is the second part. The conversation continues in real-time.
+Hello, this is my first message. And this is my second message.
 ```
 
-## Chunk Duration
+## Push-to-Talk Benefits
 
-The `--chunk-duration` option controls how long each audio segment is:
-
-- **Shorter chunks (1-2 seconds)**: More frequent updates, lower latency
-- **Longer chunks (3-5 seconds)**: Better transcription accuracy, less network overhead
-
-**Recommended**: Start with 2 seconds and adjust based on your needs.
+- **Precise control** - Record exactly what you want to say
+- **No partial sentences** - Complete thoughts before transcription
+- **Natural pauses** - Take breaks between recordings
+- **Better accuracy** - Full sentences improve transcription quality
 
 ## Microphone Permission (macOS)
 

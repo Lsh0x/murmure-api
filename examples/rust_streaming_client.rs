@@ -24,7 +24,7 @@
 //! Options:
 //! - `--server <address>` - Server address (default: http://localhost:50051)
 //!
-//! See README_STREAMING_CLIENT.md for detailed documentation.
+//! See ../docs/examples/README_STREAMING_CLIENT.md for detailed documentation.
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;

@@ -21,7 +21,7 @@
 //! - `--server <address>` - Server address (default: http://localhost:50051)
 //! - `--duration <seconds>` - Recording duration (default: 5)
 //!
-//! See README_RUST_CLIENT.md for detailed documentation.
+//! See ../docs/examples/README_RUST_CLIENT.md for detailed documentation.
 
 use std::sync::Arc;
 use std::time::Duration;

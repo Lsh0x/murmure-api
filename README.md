@@ -1,8 +1,10 @@
 # Murmure
 
-A privacy-first, open-source speech-to-text application that runs entirely on your machine, powered by a neural network via NVIDIA’s Parakeet model for fast, local transcription. Murmure turns your voice into text with no internet connection and zero data collection, and supports 25 European languages.
+A privacy-first, open-source speech-to-text application that runs entirely on your machine, powered by a neural network via NVIDIA's Parakeet model for fast, local transcription. Murmure turns your voice into text with no internet connection and zero data collection, and supports 25 European languages.
 
 Learn more on the on the [official website](https://murmure.al1x-ai.com/).
+
+> **Note**: This repository contains both the original Murmure desktop application and a standalone gRPC server implementation. The gRPC server allows you to run Murmure as a service that can be deployed locally or in the cloud (Docker, Kubernetes, AWS, etc.). For the original desktop application, see the [official Murmure repository](https://github.com/Kieirra/murmure).
 
 ![demo](public/murmure-screenshot-beautiful.png)
 
@@ -63,6 +65,28 @@ yay -S murmure
 # Or
 paru -S murmure
 ```
+
+## 📚 Documentation
+
+This repository includes comprehensive documentation for both the desktop application and the gRPC server:
+
+### Server Documentation
+
+- **[Server Guide](docs/SERVER.md)** - Complete guide to the standalone gRPC server, including setup, configuration, Docker deployment, and API reference
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get the server running in 5 minutes
+- **[API Usage](docs/API_USAGE.md)** - Detailed API documentation and usage examples
+
+### Example Clients
+
+- **[Examples Overview](docs/examples/README.md)** - Overview of all available client examples
+- **[Rust Recording Client](docs/examples/README_RUST_CLIENT.md)** - Record audio from microphone and transcribe
+- **[Rust Streaming Client](docs/examples/README_STREAMING_CLIENT.md)** - Toggle recording for conversational transcription
+- **[Rust File Client](docs/examples/README_RUST_FILE_CLIENT.md)** - Transcribe audio files from disk
+- **[Quick Usage Guide](docs/examples/USAGE.md)** - Quick reference for all example clients
+
+### Original Project
+
+- **[Official Murmure Repository](https://github.com/Kieirra/murmure)** - The original desktop application
 
 ## Usage
 

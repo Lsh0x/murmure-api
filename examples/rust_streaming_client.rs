@@ -108,18 +108,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut recording_stop_flag: Option<Arc<AtomicBool>> = None;
     let mut recording_handle: Option<tokio::task::JoinHandle<Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>>>> = None;
 
-    // Handle Ctrl+C gracefully
+    // Handle Ctrl+C gracefully - spawn signal handler before raw mode
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let shutdown_flag_clone = shutdown_flag.clone();
     
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.ok();
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            eprintln!("Failed to listen for Ctrl+C: {}", e);
+            return;
+        }
         shutdown_flag_clone.store(true, std::sync::atomic::Ordering::Relaxed);
     });
 
     loop {
         // Check if Ctrl+C was pressed
         if shutdown_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            disable_raw_mode()?;
+            
             // Stop any ongoing recording
             if is_recording {
                 println!("\n🛑 Stopping recording...");
@@ -130,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let _ = handle.await;
                 }
             }
-            disable_raw_mode()?;
+            
             println!("\n📝 Conversation transcript:\n{}", conversation_text);
             break;
         }
@@ -138,6 +143,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Wait for key press (non-blocking)
         if event::poll(Duration::from_millis(50))? {
             if let Event::Key(key_event) = event::read()? {
+                // Check for Ctrl+C in key events (backup method)
+                if let KeyCode::Char('c') = key_event.code {
+                    if key_event.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+                        disable_raw_mode()?;
+                        println!("\n\n🛑 Ctrl+C detected - Shutting down...");
+                        
+                        // Stop any ongoing recording
+                        if is_recording {
+                            if let Some(flag) = recording_stop_flag.take() {
+                                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            if let Some(handle) = recording_handle.take() {
+                                let _ = handle.await;
+                            }
+                        }
+                        
+                        println!("\n📝 Conversation transcript:\n{}", conversation_text);
+                        break;
+                    }
+                }
+                
                 match key_event.code {
                     KeyCode::Char(' ') if key_event.kind == KeyEventKind::Press => {
                         // Temporarily disable raw mode for cleaner output

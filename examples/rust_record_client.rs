@@ -141,13 +141,13 @@ fn play_wav_bytes(wav_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
     let spec = reader.spec();
 
     // Convert samples to f32
-    let samples: Result<Vec<f32>, hound::Error> = reader
+    let samples: Vec<f32> = reader
         .samples::<i16>()
         .map(|s| {
             s.map(|sample| sample as f32 / i16::MAX as f32)
+                .map_err(|e| format!("Failed to read WAV sample: {}", e))
         })
-        .collect();
-    let samples = samples.map_err(|e| format!("Failed to read WAV samples: {}", e))?;
+        .collect::<Result<Vec<f32>, _>>()?;
 
     if samples.is_empty() {
         return Err("No audio samples to play".into());

@@ -93,11 +93,13 @@ impl TtsConfig {
             }
         }
 
-        // Try default locations similar to STT
+        // Try default locations
         let default_paths = vec![
+            PathBuf::from("resources/tts"),
+            PathBuf::from("../resources/tts"),
+            PathBuf::from("_up_/resources/tts"),
+            // Legacy path for backward compatibility
             PathBuf::from("resources/piper-model"),
-            PathBuf::from("../resources/piper-model"),
-            PathBuf::from("_up_/resources/piper-model"),
         ];
 
         for path in default_paths {
@@ -107,7 +109,7 @@ impl TtsConfig {
         }
 
         Err(anyhow::anyhow!(
-            "TTS model path not found. Set MURMURE_TTS_MODEL_PATH environment variable or place model in resources/piper-model"
+            "TTS model path not found. Set MURMURE_TTS_MODEL_PATH environment variable or place model in resources/tts/"
         ))
     }
 }

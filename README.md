@@ -32,30 +32,30 @@ A standalone gRPC server implementation of the [Murmure](https://github.com/Kiei
 Download the Parakeet model (required for transcription):
 
 ```bash
-# Create resources directory
-mkdir -p resources
+# Create resources directory structure
+mkdir -p resources/stt
 
 # Download and extract STT model
-cd resources
+cd resources/stt
 curl -L -o /tmp/parakeet-model.zip \
   "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip"
 unzip /tmp/parakeet-model.zip
 rm /tmp/parakeet-model.zip
-cd ..
+cd ../..
 ```
 
-You should now have `resources/parakeet-tdt-0.6b-v3-int8/` directory.
+You should now have `resources/stt/parakeet-tdt-0.6b-v3-int8/` directory.
 
 #### Text-To-Speech (TTS) Model (Optional)
 
 Download a Piper TTS model for text-to-speech synthesis:
 
 ```bash
-# Create piper model directory
-mkdir -p resources/piper-model
+# Create TTS model directory
+mkdir -p resources/tts
 
 # Download a Piper model (example: English US voice)
-cd resources/piper-model
+cd resources/tts
 
 # Download model files (example: en_US-lessac-medium)
 curl -L -o en_US-lessac-medium.onnx \
@@ -81,17 +81,17 @@ Piper models are available from the [Piper Voices Repository](https://huggingfac
 
 ```bash
 # Download French voice
-curl -L -o resources/piper-model/fr_FR-siwis-medium.onnx \
+curl -L -o resources/tts/fr_FR-siwis-medium.onnx \
   "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx"
 
-curl -L -o resources/piper-model/fr_FR-siwis-medium.onnx.json \
+curl -L -o resources/tts/fr_FR-siwis-medium.onnx.json \
   "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json"
 
 # Download German voice
-curl -L -o resources/piper-model/de_DE-thorsten-medium.onnx \
+curl -L -o resources/tts/de_DE-thorsten-medium.onnx \
   "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/de_DE-thorsten-medium/de_DE-thorsten-medium.onnx"
 
-curl -L -o resources/piper-model/de_DE-thorsten-medium.onnx.json \
+curl -L -o resources/tts/de_DE-thorsten-medium.onnx.json \
   "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/de_DE-thorsten-medium/de_DE-thorsten-medium.onnx.json"
 ```
 
@@ -113,12 +113,12 @@ Edit `.env` to set your paths:
 
 ```bash
 # STT (Speech-To-Text) Configuration
-MURMURE_MODEL_PATH=./resources/parakeet-tdt-0.6b-v3-int8
+MURMURE_MODEL_PATH=./resources/stt/parakeet-tdt-0.6b-v3-int8
 MURMURE_CC_RULES_PATH=./resources/cc-rules
 MURMURE_DICTIONARY='["John Doe", "Jane Smith"]'  # Optional
 
 # TTS (Text-To-Speech) Configuration (Optional)
-MURMURE_TTS_MODEL_PATH=./resources/piper-model
+MURMURE_TTS_MODEL_PATH=./resources/tts
 MURMURE_TTS_SAMPLE_RATE=22050  # Default: 22050
 MURMURE_TTS_SPEAKER_ID=0  # Optional, for multi-voice models
 
@@ -145,7 +145,7 @@ export $(cat ../.env | xargs)
 Or use environment variables directly:
 
 ```bash
-export MURMURE_MODEL_PATH=./resources/parakeet-tdt-0.6b-v3-int8
+export MURMURE_MODEL_PATH=./resources/stt/parakeet-tdt-0.6b-v3-int8
 export MURMURE_CC_RULES_PATH=./resources/cc-rules
 ./target/release/murmure-server
 ```
@@ -194,7 +194,7 @@ python python_client.py audio.wav
 
 ### Using Docker Compose (Recommended)
 
-1. Ensure you have the Parakeet model in `resources/parakeet-tdt-0.6b-v3-int8/`
+1. Ensure you have the Parakeet model in `resources/stt/parakeet-tdt-0.6b-v3-int8/`
 2. Ensure you have cc-rules in `resources/cc-rules/`
 
 ```bash
@@ -208,7 +208,7 @@ The server will start on port 50051.
 ```bash
 docker build -t murmure-server .
 docker run -p 50051:50051 \
-  -e MURMURE_MODEL_PATH=/app/resources/parakeet-tdt-0.6b-v3-int8 \
+  -e MURMURE_MODEL_PATH=/app/resources/stt/parakeet-tdt-0.6b-v3-int8 \
   -e MURMURE_CC_RULES_PATH=/app/resources/cc-rules \
   -e MURMURE_GRPC_PORT=50051 \
   murmure-server
@@ -229,7 +229,7 @@ docker run -p 50051:50051 \
 
 - `MURMURE_TTS_MODEL_PATH` - Path to Piper model directory (optional, for TTS)
   - Should point to directory containing `.onnx` and `.onnx.json` files
-  - Example: `MURMURE_TTS_MODEL_PATH=./resources/piper-model`
+  - Example: `MURMURE_TTS_MODEL_PATH=./resources/tts`
 - `MURMURE_TTS_SAMPLE_RATE` - Audio sample rate in Hz (default: 22050)
 - `MURMURE_TTS_SPEAKER_ID` - Speaker ID for multi-voice models (optional)
   - Use `0` for single-voice models or to select first voice
@@ -245,11 +245,11 @@ Create `config.json`:
 
 ```json
 {
-  "model_path": "/path/to/parakeet-model",
-  "cc_rules_path": "/path/to/cc-rules",
+  "model_path": "/path/to/resources/stt/parakeet-tdt-0.6b-v3-int8",
+  "cc_rules_path": "/path/to/resources/cc-rules",
   "dictionary": ["word1", "word2"],
   "tts": {
-    "model_path": "/path/to/piper-model",
+    "model_path": "/path/to/resources/tts",
     "sample_rate": 22050,
     "speaker_id": 0
   },

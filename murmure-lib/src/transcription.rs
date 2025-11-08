@@ -3,10 +3,10 @@ use crate::config::ServerConfig;
 use crate::dictionary::Dictionary;
 use crate::model::Model;
 use anyhow::Result;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use std::io::Write;
 
 pub struct TranscriptionService {
     model: Arc<Model>,
@@ -35,9 +35,13 @@ impl TranscriptionService {
     }
 
     fn ensure_engine_loaded(&self) -> Result<()> {
-        if !self.engine_loaded.load(std::sync::atomic::Ordering::Relaxed) {
+        if !self
+            .engine_loaded
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
             preload_engine(&self.model)?;
-            self.engine_loaded.store(true, std::sync::atomic::Ordering::Relaxed);
+            self.engine_loaded
+                .store(true, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
     }
@@ -90,4 +94,3 @@ impl TranscriptionService {
         &self.config
     }
 }
-

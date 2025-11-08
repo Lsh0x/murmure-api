@@ -10,8 +10,8 @@ pub mod murmure {
 }
 
 use murmure::{
-    TranscribeFileRequest, TranscribeFileResponse,
-    TranscribeStreamRequest, TranscribeStreamResponse,
+    TranscribeFileRequest, TranscribeFileResponse, TranscribeStreamRequest,
+    TranscribeStreamResponse,
 };
 
 pub struct TranscriptionServiceImpl {
@@ -33,7 +33,10 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
         let req = request.into_inner();
         let audio_data = req.audio_data;
 
-        tracing::debug!("Received transcribe_file request: {} bytes", audio_data.len());
+        tracing::debug!(
+            "Received transcribe_file request: {} bytes",
+            audio_data.len()
+        );
 
         match self.service.transcribe_audio_bytes(&audio_data) {
             Ok(text) => {
@@ -65,7 +68,7 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
         let (tx, rx) = mpsc::channel(128);
 
         let service = Arc::clone(&self.service);
-        
+
         tokio::spawn(async move {
             let mut audio_buffer = Vec::new();
             let mut end_of_stream = false;
@@ -74,10 +77,14 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
                 match result {
                     Ok(req) => {
                         match req.request_type {
-                            Some(murmure::transcribe_stream_request::RequestType::AudioChunk(chunk)) => {
+                            Some(murmure::transcribe_stream_request::RequestType::AudioChunk(
+                                chunk,
+                            )) => {
                                 audio_buffer.extend_from_slice(&chunk);
                             }
-                            Some(murmure::transcribe_stream_request::RequestType::EndOfStream(_)) => {
+                            Some(murmure::transcribe_stream_request::RequestType::EndOfStream(
+                                _,
+                            )) => {
                                 end_of_stream = true;
                                 break;
                             }
@@ -107,18 +114,21 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
                 match service.transcribe_audio_bytes(&audio_buffer) {
                     Ok(text) => {
                         let response = TranscribeStreamResponse {
-                            response_type: Some(murmure::transcribe_stream_response::ResponseType::FinalText(
-                                text,
-                            )),
+                            response_type: Some(
+                                murmure::transcribe_stream_response::ResponseType::FinalText(text),
+                            ),
                             is_final: true,
                         };
                         let _ = tx.send(Ok(response)).await;
                     }
                     Err(e) => {
                         let response = TranscribeStreamResponse {
-                            response_type: Some(murmure::transcribe_stream_response::ResponseType::Error(
-                                format!("Transcription failed: {}", e),
-                            )),
+                            response_type: Some(
+                                murmure::transcribe_stream_response::ResponseType::Error(format!(
+                                    "Transcription failed: {}",
+                                    e
+                                )),
+                            ),
                             is_final: true,
                         };
                         let _ = tx.send(Ok(response)).await;
@@ -133,4 +143,3 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
         Ok(Response::new(ReceiverStream::new(rx)))
     }
 }
-

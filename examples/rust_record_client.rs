@@ -23,12 +23,12 @@
 //!
 //! See ../docs/examples/README_RUST_CLIENT.md for detailed documentation.
 
-use std::sync::Arc;
-use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavSpec, WavWriter};
-use std::io::BufWriter;
 use std::fs::File;
+use std::io::BufWriter;
+use std::sync::Arc;
+use std::time::Duration;
 use tonic::Request;
 
 // Include generated proto code from build script
@@ -105,27 +105,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let host = cpal::default_host();
-    
+
     // List all available input devices for debugging
     let input_devices: Vec<_> = host.input_devices()?.collect();
     if input_devices.is_empty() {
         return Err("❌ No input devices found. Please check microphone permissions.".into());
     }
-    
+
     println!("   Available input devices:");
     for (i, dev) in input_devices.iter().enumerate() {
         if let Ok(name) = dev.name() {
             println!("     {}. {}", i + 1, name);
         }
     }
-    
+
     let device = host
         .default_input_device()
         .ok_or("❌ No default input device available. Check microphone permissions in System Settings > Privacy & Security > Microphone")?;
 
     let device_name = device.name().unwrap_or_else(|_| "Unknown".to_string());
     println!("\n   Using device: {}", device_name);
-    
+
     let config = match device.default_input_config() {
         Ok(config) => config,
         Err(e) => {
@@ -135,13 +135,13 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
             ).into());
         }
     };
-    
+
     println!("   Sample rate: {} Hz", config.sample_rate().0);
     println!("   Channels: {}", config.channels());
 
     // Create temporary WAV file
     let temp_file = std::env::temp_dir().join(format!("murmure-record-{}.wav", std::process::id()));
-    
+
     let spec = WavSpec {
         channels: 1, // Force mono
         sample_rate: config.sample_rate().0,
@@ -172,14 +172,14 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
     };
 
     println!("   ✅ Microphone stream created (this doesn't guarantee permission)");
-    
+
     if let Err(e) = stream.play() {
         return Err(format!(
             "❌ Failed to start recording stream: {}\n   Check microphone permissions and try again.",
             e
         ).into());
     }
-    
+
     println!("   Recording for {} seconds...", duration_secs);
     println!("   💡 Speak now! If audio levels stay at 0, microphone permission is likely denied.");
 
@@ -188,23 +188,29 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
     let start = std::time::Instant::now();
     let mut last_amplitude: i16 = 0;
     let mut warning_printed = false;
-    
+
     loop {
-        std::thread::sleep(std::cmp::min(check_interval, Duration::from_secs(duration_secs).saturating_sub(start.elapsed())));
-        
+        std::thread::sleep(std::cmp::min(
+            check_interval,
+            Duration::from_secs(duration_secs).saturating_sub(start.elapsed()),
+        ));
+
         let stats = audio_stats.lock().unwrap();
         let current_amplitude = stats.1;
         let elapsed = start.elapsed();
-        
+
         if current_amplitude != last_amplitude {
-            println!("   📊 Audio level: {} ({} samples processed)", current_amplitude, stats.0);
+            println!(
+                "   📊 Audio level: {} ({} samples processed)",
+                current_amplitude, stats.0
+            );
             last_amplitude = current_amplitude;
         }
-        
+
         if elapsed >= Duration::from_secs(duration_secs) {
             break;
         }
-        
+
         // Check early if completely silent after 2 seconds (only warn once)
         if !warning_printed && elapsed >= Duration::from_secs(2) && stats.1 == 0 && stats.0 > 0 {
             println!("\n   ⚠️  WARNING: No audio detected after 2 seconds!");
@@ -222,8 +228,11 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
 
     let final_stats = audio_stats.lock().unwrap();
     println!("\n   Recording complete.");
-    println!("   Final stats: {} samples, max amplitude: {}", final_stats.0, final_stats.1);
-    
+    println!(
+        "   Final stats: {} samples, max amplitude: {}",
+        final_stats.0, final_stats.1
+    );
+
     drop(stream);
 
     // Finalize WAV file
@@ -232,14 +241,14 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
         writer.flush()?;
         drop(writer); // Explicitly drop to get ownership back
     }
-    
+
     // Get the writer back and finalize
     let writer = Arc::try_unwrap(writer_arc).map_err(|_| "Failed to unwrap Arc")?;
     writer.into_inner().unwrap().finalize()?;
 
     // Read WAV file into memory
     let audio_data = std::fs::read(&temp_file)?;
-    
+
     // Debug: Check if audio has non-zero samples
     use hound::WavReader;
     let reader = WavReader::open(&temp_file)?;
@@ -248,13 +257,20 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
         let non_zero_count = samples.iter().filter(|&&s| s != 0).count();
         let total_count = samples.len();
         let max_amplitude = samples.iter().map(|&s| s.abs()).max().unwrap_or(0);
-        
+
         println!("   Audio analysis:");
         println!("   - Total samples: {}", total_count);
-        println!("   - Non-zero samples: {} ({:.1}%)", non_zero_count, 
-                 if total_count > 0 { (non_zero_count as f64 / total_count as f64) * 100.0 } else { 0.0 });
+        println!(
+            "   - Non-zero samples: {} ({:.1}%)",
+            non_zero_count,
+            if total_count > 0 {
+                (non_zero_count as f64 / total_count as f64) * 100.0
+            } else {
+                0.0
+            }
+        );
         println!("   - Max amplitude: {} / {}", max_amplitude, i16::MAX);
-        
+
         if non_zero_count == 0 {
             println!("   ❌ ERROR: Audio appears to be completely silent!");
             println!("   This indicates the microphone is not capturing audio.");
@@ -263,7 +279,9 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
             println!("   2. Microphone is muted or volume is zero");
             println!("   3. Wrong microphone selected");
             println!("   4. Microphone hardware disconnected");
-            return Err("Audio recording is silent - microphone may not have access or is muted".into());
+            return Err(
+                "Audio recording is silent - microphone may not have access or is muted".into(),
+            );
         } else if max_amplitude < 100 {
             println!("   ⚠️  WARNING: Audio is very quiet (max amplitude < 100)");
             println!("   Try speaking louder or increasing microphone input volume.");
@@ -271,11 +289,11 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
             println!("   ✅ Audio levels look good!");
         }
     }
-    
+
     // Optionally keep the file for debugging (comment out cleanup)
     // Uncomment the next line to keep the file for inspection:
     // println!("   Debug: WAV file saved at: {}", temp_file.display());
-    
+
     // Clean up
     let _ = std::fs::remove_file(&temp_file);
 
@@ -294,7 +312,7 @@ where
     f32: cpal::FromSample<T>,
 {
     let channels = config.channels() as usize;
-    
+
     // Track audio levels in real-time
     let audio_stats = Arc::new(std::sync::Mutex::new((0usize, 0i16))); // (sample_count, max_amplitude)
     let stats_clone = audio_stats.clone();
@@ -305,7 +323,7 @@ where
             let mut writer = writer.lock().unwrap();
             let mut stats = stats_clone.lock().unwrap();
             stats.0 += data.len() / channels;
-            
+
             for frame in data.chunks_exact(channels) {
                 let sample = if channels == 1 {
                     frame[0].to_sample::<f32>()
@@ -315,7 +333,8 @@ where
                 };
 
                 // Convert to i16 and write
-                let sample_i16 = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                let sample_i16 =
+                    (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
                 let amplitude = sample_i16.abs();
                 if amplitude > stats.1 {
                     stats.1 = amplitude;
@@ -329,4 +348,3 @@ where
 
     Ok((stream, audio_stats))
 }
-

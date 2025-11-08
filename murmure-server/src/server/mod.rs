@@ -1,4 +1,3 @@
 pub mod grpc;
 
-pub use grpc::{TranscriptionServiceImpl, murmure};
-
+pub use grpc::{murmure, TranscriptionServiceImpl};

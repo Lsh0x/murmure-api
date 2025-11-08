@@ -26,6 +26,7 @@ prost-types = "0.13"
 anyhow = "1.0"
 futures = "0.3"
 crossterm = "0.28"
+murmure-core = { path = "../murmure-core" }
 
 [build-dependencies]
 tonic-build = { version = "0.12", features = ["prost"] }

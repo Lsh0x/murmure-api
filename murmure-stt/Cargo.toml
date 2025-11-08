@@ -1,12 +1,12 @@
 [package]
-name = "murmure-tts"
+name = "murmure-stt"
 version = "1.4.0"
 description = "Privacy-first speech-to-text library, running entirely on your machine"
 authors = ["al1x-ai.com"]
 edition = "2021"
 
 [lib]
-name = "murmure_tts"
+name = "murmure_stt"
 path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 

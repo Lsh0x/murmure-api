@@ -1,4 +1,4 @@
-# Rename murmure-lib to murmure-tts
+# Rename murmure-lib to murmure-stt
 
 **Type:** enhancement  
 **Status:** done  

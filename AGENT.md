@@ -18,7 +18,7 @@
 
 | Path | Description | Notes |
 | --- | --- | --- |
-| `murmure-tts/` | Core library with transcription engine, audio processing, dictionary, and model management | Shared library used by server and examples |
+| `murmure-stt/` | Core library with transcription engine, audio processing, dictionary, and model management | Shared library used by server and examples |
 | `murmure-server/` | gRPC server implementation | Main server crate with gRPC handlers |
 | `examples/` | Runnable usage examples and clients | Rust clients demonstrating API usage |
 | `proto/` | Protocol Buffer definitions | gRPC service and message definitions |
@@ -75,7 +75,7 @@ Define any additional agents or overrides. Extend the global agent list using th
       "files": [
         "./proto/murmure.proto",
         "./docs/SERVER.md",
-        "./murmure-tts/src/engine/",
+        "./murmure-stt/src/engine/",
         "./murmure-server/src/server/grpc.rs"
       ],
       "capabilities": [

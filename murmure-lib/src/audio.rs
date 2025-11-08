@@ -1,11 +1,11 @@
 use crate::config::ServerConfig;
 use crate::dictionary::{fix_transcription_with_dictionary, get_cc_rules_path, Dictionary};
 use crate::engine::{
-    engine::ParakeetEngine, engine::ParakeetModelParams, transcription_engine::TranscriptionEngine,
+    parakeet::{ParakeetEngine, ParakeetModelParams},
+    transcription_engine::TranscriptionEngine,
 };
 use crate::model::Model;
 use anyhow::Result;
-use hound;
 use once_cell::sync::Lazy;
 
 static ENGINE: Lazy<parking_lot::Mutex<Option<ParakeetEngine>>> =

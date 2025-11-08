@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         }
     };
     let config = Arc::new(config);
-    info!("Configuration loaded: gRPC port = {}", (*config).grpc_port);
+    info!("Configuration loaded: gRPC port = {}", config.grpc_port);
 
     // Initialize model
     eprintln!("[DEBUG] Checking model availability...");

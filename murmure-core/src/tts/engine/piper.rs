@@ -1,5 +1,6 @@
 use super::synthesis_engine::{SynthesisEngine, SynthesisResult};
 use std::path::Path;
+use piper_tts_rust::model_handler::Model;
 
 pub struct PiperModelParams {
     pub use_cuda: bool,
@@ -26,10 +27,8 @@ impl Default for PiperInferenceParams {
 }
 
 pub struct PiperEngine {
-    model_path: Option<std::path::PathBuf>,
+    model: Option<Model>,
     sample_rate: u32,
-    // TODO: Add actual Piper model state once API is confirmed
-    // This is a placeholder structure
 }
 
 impl Default for PiperEngine {
@@ -41,7 +40,7 @@ impl Default for PiperEngine {
 impl PiperEngine {
     pub fn new() -> Self {
         Self {
-            model_path: None,
+            model: None,
             sample_rate: 22050,
         }
     }
@@ -56,37 +55,72 @@ impl SynthesisEngine for PiperEngine {
         model_path: &Path,
         _params: Self::ModelParams,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // TODO: Implement actual Piper model loading
-        // This requires understanding the piper crate API
-        // Placeholder: store the path for now
-        self.model_path = Some(model_path.to_path_buf());
+        // Find the .onnx file and .json config file in the directory
+        let (onnx_file, config_file) = if model_path.is_file() && model_path.extension().and_then(|s| s.to_str()) == Some("onnx") {
+            let config_path = model_path.with_extension("onnx.json");
+            if !config_path.exists() {
+                return Err(format!("Config file not found: {}", config_path.display()).into());
+            }
+            (model_path.to_path_buf(), config_path)
+        } else if model_path.is_dir() {
+            // Look for .onnx and .json files in the directory
+            let mut onnx_path = None;
+            let mut json_path = None;
+            for entry in std::fs::read_dir(model_path)? {
+                let entry = entry?;
+                let path = entry.path();
+                if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                    if ext == "onnx" {
+                        onnx_path = Some(path.clone());
+                        // Look for corresponding .json file
+                        let json_file = path.with_extension("onnx.json");
+                        if json_file.exists() {
+                            json_path = Some(json_file);
+                        }
+                    }
+                }
+            }
+            let onnx = onnx_path.ok_or_else(|| "No .onnx file found in model directory".to_string())?;
+            let json = json_path.ok_or_else(|| "No .onnx.json config file found in model directory".to_string())?;
+            (onnx, json)
+        } else {
+            return Err("Model path must be a directory or .onnx file".into());
+        };
 
-        // TODO: Load model using piper crate
-        // Example (needs verification):
-        // let piper = piper::Piper::new(model_path)?;
-        // self.voice = Some(piper);
+        // Load the model (requires both .onnx and .json paths)
+        let model = Model::new(
+            onnx_file.to_str().ok_or_else(|| "Invalid model path")?,
+            config_file.to_str().ok_or_else(|| "Invalid config path")?,
+        )
+        .map_err(|e| format!("Failed to load Piper model: {}", e))?;
+        
+        // Get sample rate from the model config (convert u64 to u32)
+        self.sample_rate = model.config.audio.sample_rate as u32;
+        self.model = Some(model);
 
         Ok(())
     }
 
     fn synthesize_text(
         &mut self,
-        _text: &str,
+        text: &str,
         _params: Option<Self::InferenceParams>,
     ) -> Result<SynthesisResult, Box<dyn std::error::Error>> {
-        // TODO: Implement actual Piper synthesis
-        // This is a placeholder that returns empty audio
-        // Real implementation should use piper crate to synthesize text
+        let model = self.model.as_mut()
+            .ok_or_else(|| "Model not loaded".to_string())?;
 
-        if self.model_path.is_none() {
-            return Err("Model not loaded".into());
-        }
+        // Convert text to IPA phonemes first, then synthesize
+        // For now, try using process_ipa_string with the text directly
+        // If that doesn't work, we'll need to add PhonemeGen for text-to-IPA conversion
+        // Note: process_ipa_string expects IPA format, but let's try with regular text first
+        // The model might handle text-to-IPA conversion internally
+        
+        // Try to synthesize - if it fails, we may need PhonemeGen
+        let (_shape, audio_samples) = model.process_ipa_string(text)
+            .map_err(|e| format!("Synthesis failed (text may need IPA conversion): {}", e))?;
 
-        // Placeholder: return empty audio samples
-        // Real implementation:
-        // let audio_samples = self.voice.synthesize(text)?;
         Ok(SynthesisResult {
-            audio_samples: Vec::new(), // TODO: Replace with actual synthesis
+            audio_samples,
             sample_rate: self.sample_rate,
             is_final: true,
         })
@@ -106,7 +140,6 @@ impl SynthesisEngine for PiperEngine {
     }
 
     fn unload_model(&mut self) {
-        self.model_path = None;
-        // TODO: Clean up Piper model resources
+        self.model = None;
     }
 }

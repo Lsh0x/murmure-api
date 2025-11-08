@@ -25,5 +25,5 @@ rphonetic = "3.0.4"
 parking_lot = "0.12"
 tempfile = "3.10"
 toml = "0.8"
-piper = "0.2"
+piper-tts-rust = "0.1.1"
 

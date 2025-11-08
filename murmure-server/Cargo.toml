@@ -12,7 +12,7 @@ name = "murmure-server"
 path = "src/main.rs"
 
 [dependencies]
-murmure-lib = { path = "../murmure-lib" }
+murmure-stt = { path = "../murmure-stt" }
 anyhow = "1.0"
 tokio = { version = "1", features = ["full"] }
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }

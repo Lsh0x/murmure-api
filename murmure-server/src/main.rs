@@ -2,10 +2,10 @@ use std::sync::Arc;
 use tonic::transport::Server;
 use tracing::{error, info};
 
-use murmure_lib::config::ServerConfig;
-use murmure_lib::dictionary::Dictionary;
-use murmure_lib::model::Model;
-use murmure_lib::transcription::TranscriptionService;
+use murmure_stt::config::ServerConfig;
+use murmure_stt::dictionary::Dictionary;
+use murmure_stt::model::Model;
+use murmure_stt::transcription::TranscriptionService;
 
 mod server;
 

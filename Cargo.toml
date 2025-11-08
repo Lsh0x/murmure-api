@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "murmure-lib",
+    "murmure-stt",
     "murmure-server",
     "examples",
 ]

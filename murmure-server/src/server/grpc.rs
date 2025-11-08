@@ -1,4 +1,5 @@
-use murmure_stt::transcription::TranscriptionService;
+use murmure_core::stt::transcription::TranscriptionService;
+use murmure_core::tts::synthesis::SynthesisService;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -10,8 +11,9 @@ pub mod murmure {
 }
 
 use murmure::{
-    TranscribeFileRequest, TranscribeFileResponse, TranscribeStreamRequest,
-    TranscribeStreamResponse,
+    SynthesizeStreamRequest, SynthesizeStreamResponse, SynthesizeTextRequest,
+    SynthesizeTextResponse, TranscribeFileRequest, TranscribeFileResponse,
+    TranscribeStreamRequest, TranscribeStreamResponse,
 };
 
 pub struct TranscriptionServiceImpl {
@@ -129,6 +131,149 @@ impl murmure::transcription_service_server::TranscriptionService for Transcripti
                                     e
                                 )),
                             ),
+                            is_final: true,
+                        };
+                        let _ = tx.send(Ok(response)).await;
+                    }
+                }
+            }
+
+            // Signal end of response stream
+            drop(tx);
+        });
+
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+// ============================================================================
+// Synthesis Service Implementation
+// ============================================================================
+
+pub struct SynthesisServiceImpl {
+    service: Arc<SynthesisService>,
+}
+
+impl SynthesisServiceImpl {
+    pub fn new(service: Arc<SynthesisService>) -> Self {
+        Self { service }
+    }
+}
+
+#[tonic::async_trait]
+impl murmure::synthesis_service_server::SynthesisService for SynthesisServiceImpl {
+    async fn synthesize_text(
+        &self,
+        request: Request<SynthesizeTextRequest>,
+    ) -> Result<Response<SynthesizeTextResponse>, Status> {
+        let req = request.into_inner();
+        let text = req.text;
+
+        tracing::debug!("Received synthesize_text request: {} chars", text.len());
+
+        match self.service.synthesize_text(&text) {
+            Ok(audio_data) => {
+                let sample_rate = self
+                    .service
+                    .get_config()
+                    .sample_rate;
+                tracing::info!("Synthesis successful: {} bytes", audio_data.len());
+                Ok(Response::new(SynthesizeTextResponse {
+                    audio_data,
+                    sample_rate,
+                    success: true,
+                    error: String::new(),
+                }))
+            }
+            Err(e) => {
+                tracing::error!("Synthesis failed: {}", e);
+                Ok(Response::new(SynthesizeTextResponse {
+                    audio_data: Vec::new(),
+                    sample_rate: 0,
+                    success: false,
+                    error: format!("Synthesis failed: {}", e),
+                }))
+            }
+        }
+    }
+
+    type SynthesizeStreamStream = ReceiverStream<Result<SynthesizeStreamResponse, Status>>;
+
+    async fn synthesize_stream(
+        &self,
+        request: Request<tonic::Streaming<SynthesizeStreamRequest>>,
+    ) -> Result<Response<Self::SynthesizeStreamStream>, Status> {
+        let mut stream = request.into_inner();
+        let (tx, rx) = mpsc::channel(128);
+
+        let service = Arc::clone(&self.service);
+        let sample_rate = service.get_config().sample_rate;
+
+        tokio::spawn(async move {
+            let mut text_buffer = String::new();
+            let mut end_of_stream = false;
+
+            while let Some(result) = stream.message().await.transpose() {
+                match result {
+                    Ok(req) => {
+                        match req.request_type {
+                            Some(murmure::synthesize_stream_request::RequestType::TextChunk(
+                                chunk,
+                            )) => {
+                                text_buffer.push_str(&chunk);
+                            }
+                            Some(murmure::synthesize_stream_request::RequestType::EndOfStream(
+                                _,
+                            )) => {
+                                end_of_stream = true;
+                                break;
+                            }
+                            None => {
+                                // Empty request, ignore
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx
+                            .send(Ok(SynthesizeStreamResponse {
+                                response_type: Some(
+                                    murmure::synthesize_stream_response::ResponseType::Error(
+                                        format!("Stream error: {}", e),
+                                    ),
+                                ),
+                                sample_rate: 0,
+                                is_final: false,
+                            }))
+                            .await;
+                        return;
+                    }
+                }
+            }
+
+            // Process accumulated text buffer
+            if !text_buffer.is_empty() || end_of_stream {
+                match service.synthesize_text(&text_buffer) {
+                    Ok(audio_data) => {
+                        let response = SynthesizeStreamResponse {
+                            response_type: Some(
+                                murmure::synthesize_stream_response::ResponseType::FinalAudio(
+                                    audio_data,
+                                ),
+                            ),
+                            sample_rate,
+                            is_final: true,
+                        };
+                        let _ = tx.send(Ok(response)).await;
+                    }
+                    Err(e) => {
+                        let response = SynthesizeStreamResponse {
+                            response_type: Some(
+                                murmure::synthesize_stream_response::ResponseType::Error(format!(
+                                    "Synthesis failed: {}",
+                                    e
+                                )),
+                            ),
+                            sample_rate: 0,
                             is_final: true,
                         };
                         let _ = tx.send(Ok(response)).await;

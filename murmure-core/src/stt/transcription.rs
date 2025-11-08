@@ -1,7 +1,7 @@
-use crate::audio::{preload_engine, transcribe_audio};
-use crate::config::ServerConfig;
-use crate::dictionary::Dictionary;
-use crate::model::Model;
+use crate::stt::audio::{preload_engine, transcribe_audio};
+use crate::stt::config::ServerConfig;
+use crate::stt::dictionary::Dictionary;
+use crate::stt::model::Model;
 use anyhow::Result;
 use std::io::Write;
 use std::path::Path;

@@ -67,6 +67,6 @@ pub fn fix_transcription_with_dictionary(
 }
 
 // Downloaded from https://github.com/apache/commons-codec/tree/rel/commons-codec-1.15/src/main/resources/org/apache/commons/codec/language/bm
-pub fn get_cc_rules_path(config: &crate::config::ServerConfig) -> anyhow::Result<PathBuf> {
+pub fn get_cc_rules_path(config: &crate::stt::config::ServerConfig) -> anyhow::Result<PathBuf> {
     config.get_cc_rules_path()
 }

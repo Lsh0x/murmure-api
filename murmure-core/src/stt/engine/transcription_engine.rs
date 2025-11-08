@@ -1,6 +1,6 @@
 // Minimal transcription API types
 
-use crate::audio::read_wav_samples;
+use crate::stt::audio::read_wav_samples;
 use std::path::Path;
 
 /// The result of a transcription operation.

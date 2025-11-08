@@ -1,10 +1,10 @@
-use crate::config::ServerConfig;
-use crate::dictionary::{fix_transcription_with_dictionary, get_cc_rules_path, Dictionary};
-use crate::engine::{
+use crate::stt::config::ServerConfig;
+use crate::stt::dictionary::{fix_transcription_with_dictionary, get_cc_rules_path, Dictionary};
+use crate::stt::engine::{
     parakeet::{ParakeetEngine, ParakeetModelParams},
     transcription_engine::TranscriptionEngine,
 };
-use crate::model::Model;
+use crate::stt::model::Model;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 

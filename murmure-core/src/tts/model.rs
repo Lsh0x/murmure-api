@@ -1,13 +1,13 @@
-use crate::config::ServerConfig;
+use super::config::TtsConfig;
 use anyhow::Result;
 use std::path::PathBuf;
 
-pub struct Model {
-    config: ServerConfig,
+pub struct TtsModel {
+    config: TtsConfig,
 }
 
-impl Model {
-    pub fn new(config: ServerConfig) -> Self {
+impl TtsModel {
+    pub fn new(config: TtsConfig) -> Self {
         Self { config }
     }
 
@@ -17,5 +17,9 @@ impl Model {
 
     pub fn is_available(&self) -> bool {
         self.get_model_path().is_ok()
+    }
+
+    pub fn get_config(&self) -> &TtsConfig {
+        &self.config
     }
 }

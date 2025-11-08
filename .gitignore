@@ -39,4 +39,5 @@ Cargo.lock
 
 # Rust incremental compilation
 **/incremental/
-*.pdb
+*.pdbresources/
+*.onnx

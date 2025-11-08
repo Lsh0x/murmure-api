@@ -7,11 +7,13 @@ A standalone gRPC server implementation of the [Murmure](https://github.com/Kiei
 ## Features
 
 - **gRPC API** with bidirectional streaming support
-- **Real-time transcription** via streaming audio
+- **Real-time transcription** via streaming audio (STT)
+- **Text-to-speech synthesis** with Piper TTS (TTS)
 - **Custom dictionary** support for phonetic correction
 - **Docker-ready** for easy deployment
 - **Privacy First**: All processing happens locally on your device. No data ever leaves your server.
 - **Powered by Parakeet**: NVIDIA's state-of-the-art speech recognition model runs entirely on-device
+- **Powered by Piper**: Fast, local neural text-to-speech system
 
 ## Quick Start
 
@@ -23,24 +25,81 @@ A standalone gRPC server implementation of the [Murmure](https://github.com/Kiei
   - Ubuntu/Debian: `sudo apt-get install protobuf-compiler`
   - Windows: Download from [protobuf releases](https://github.com/protocolbuffers/protobuf/releases)
 
-### 1. Download the Model
+### 1. Download the Models
 
-Download the Parakeet model (required):
+#### Speech-To-Text (STT) Model
+
+Download the Parakeet model (required for transcription):
 
 ```bash
-# Create resources directory
-mkdir -p resources
+# Create resources directory structure
+mkdir -p resources/stt
 
-# Download and extract model
-cd resources
+# Download and extract STT model
+cd resources/stt
 curl -L -o /tmp/parakeet-model.zip \
   "https://github.com/Kieirra/murmure-model/releases/download/1.0.0/parakeet-tdt-0.6b-v3-int8.zip"
 unzip /tmp/parakeet-model.zip
 rm /tmp/parakeet-model.zip
-cd ..
+cd ../..
 ```
 
-You should now have `resources/parakeet-tdt-0.6b-v3-int8/` directory.
+You should now have `resources/stt/parakeet-tdt-0.6b-v3-int8/` directory.
+
+#### Text-To-Speech (TTS) Model (Optional)
+
+Download a Piper TTS model for text-to-speech synthesis:
+
+```bash
+# Create TTS model directory
+mkdir -p resources/tts
+
+# Download a Piper model (example: English US voice)
+cd resources/tts
+
+# Download model files (example: en_US-lessac-medium)
+curl -L -o en_US-lessac-medium.onnx \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/en_US-lessac-medium/en_US-lessac-medium.onnx"
+
+curl -L -o en_US-lessac-medium.onnx.json \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/en_US-lessac-medium/en_US-lessac-medium.onnx.json"
+
+cd ../..
+```
+
+**Available Piper Models:**
+
+Piper models are available from the [Piper Voices Repository](https://huggingface.co/rhasspy/piper-voices) on Hugging Face. You can download models for various languages and voices:
+
+- **English (US)**: `en_US-lessac-medium`, `en_US-amy-medium`, `en_US-libritts-high`, etc.
+- **English (UK)**: `en_GB-alba-medium`, `en_GB-northern_english_male-medium`, etc.
+- **French**: `fr_FR-siwis-medium`, `fr_FR-upmc-medium`, etc.
+- **German**: `de_DE-thorsten-medium`, `de_DE-eva-medium`, etc.
+- And many more languages...
+
+**Example: Download different voice models:**
+
+```bash
+# Download French voice
+curl -L -o resources/tts/fr_FR-siwis-medium.onnx \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx"
+
+curl -L -o resources/tts/fr_FR-siwis-medium.onnx.json \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json"
+
+# Download German voice
+curl -L -o resources/tts/de_DE-thorsten-medium.onnx \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/de_DE-thorsten-medium/de_DE-thorsten-medium.onnx"
+
+curl -L -o resources/tts/de_DE-thorsten-medium.onnx.json \
+  "https://huggingface.co/rhasspy/piper-voices/resolve/main/de/de_DE/de_DE-thorsten-medium/de_DE-thorsten-medium.onnx.json"
+```
+
+**Note:** Each Piper model consists of two files:
+- `.onnx` - The model weights file
+- `.onnx.json` - The model configuration file
+
+Both files are required for the model to work.
 
 ### 2. Configure Environment
 
@@ -53,8 +112,17 @@ cp .env.example .env
 Edit `.env` to set your paths:
 
 ```bash
-MURMURE_MODEL_PATH=./resources/parakeet-tdt-0.6b-v3-int8
+# STT (Speech-To-Text) Configuration
+MURMURE_MODEL_PATH=./resources/stt/parakeet-tdt-0.6b-v3-int8
 MURMURE_CC_RULES_PATH=./resources/cc-rules
+MURMURE_DICTIONARY='["John Doe", "Jane Smith"]'  # Optional
+
+# TTS (Text-To-Speech) Configuration (Optional)
+MURMURE_TTS_MODEL_PATH=./resources/tts
+MURMURE_TTS_SAMPLE_RATE=22050  # Default: 22050
+MURMURE_TTS_SPEAKER_ID=0  # Optional, for multi-voice models
+
+# Server Configuration
 MURMURE_GRPC_PORT=50051
 MURMURE_LOG_LEVEL=info
 ```
@@ -77,7 +145,7 @@ export $(cat ../.env | xargs)
 Or use environment variables directly:
 
 ```bash
-export MURMURE_MODEL_PATH=./resources/parakeet-tdt-0.6b-v3-int8
+export MURMURE_MODEL_PATH=./resources/stt/parakeet-tdt-0.6b-v3-int8
 export MURMURE_CC_RULES_PATH=./resources/cc-rules
 ./target/release/murmure-server
 ```
@@ -126,7 +194,7 @@ python python_client.py audio.wav
 
 ### Using Docker Compose (Recommended)
 
-1. Ensure you have the Parakeet model in `resources/parakeet-tdt-0.6b-v3-int8/`
+1. Ensure you have the Parakeet model in `resources/stt/parakeet-tdt-0.6b-v3-int8/`
 2. Ensure you have cc-rules in `resources/cc-rules/`
 
 ```bash
@@ -140,7 +208,7 @@ The server will start on port 50051.
 ```bash
 docker build -t murmure-server .
 docker run -p 50051:50051 \
-  -e MURMURE_MODEL_PATH=/app/resources/parakeet-tdt-0.6b-v3-int8 \
+  -e MURMURE_MODEL_PATH=/app/resources/stt/parakeet-tdt-0.6b-v3-int8 \
   -e MURMURE_CC_RULES_PATH=/app/resources/cc-rules \
   -e MURMURE_GRPC_PORT=50051 \
   murmure-server
@@ -150,10 +218,24 @@ docker run -p 50051:50051 \
 
 ### Environment Variables
 
-- `MURMURE_MODEL_PATH` - Path to Parakeet model directory (required)
-- `MURMURE_CC_RULES_PATH` - Path to cc-rules directory (required)
+#### Speech-To-Text (STT) Configuration
+
+- `MURMURE_MODEL_PATH` - Path to Parakeet model directory (required for STT)
+- `MURMURE_CC_RULES_PATH` - Path to cc-rules directory (required for STT)
 - `MURMURE_DICTIONARY` - JSON array of custom dictionary words (optional)
   - Example: `MURMURE_DICTIONARY='["John Doe", "Jane Smith"]'`
+
+#### Text-To-Speech (TTS) Configuration
+
+- `MURMURE_TTS_MODEL_PATH` - Path to Piper model directory (optional, for TTS)
+  - Should point to directory containing `.onnx` and `.onnx.json` files
+  - Example: `MURMURE_TTS_MODEL_PATH=./resources/tts`
+- `MURMURE_TTS_SAMPLE_RATE` - Audio sample rate in Hz (default: 22050)
+- `MURMURE_TTS_SPEAKER_ID` - Speaker ID for multi-voice models (optional)
+  - Use `0` for single-voice models or to select first voice
+
+#### Server Configuration
+
 - `MURMURE_GRPC_PORT` - gRPC server port (default: 50051)
 - `MURMURE_LOG_LEVEL` - Logging level (default: info)
 
@@ -163,9 +245,14 @@ Create `config.json`:
 
 ```json
 {
-  "model_path": "/path/to/model",
-  "cc_rules_path": "/path/to/cc-rules",
+  "model_path": "/path/to/resources/stt/parakeet-tdt-0.6b-v3-int8",
+  "cc_rules_path": "/path/to/resources/cc-rules",
   "dictionary": ["word1", "word2"],
+  "tts": {
+    "model_path": "/path/to/resources/tts",
+    "sample_rate": 22050,
+    "speaker_id": 0
+  },
   "grpc_port": 50051,
   "log_level": "info"
 }
@@ -197,7 +284,21 @@ Bulgarian (bg), Croatian (hr), Czech (cs), Danish (da), Dutch (nl), English (en)
 
 ## Technology
 
+### Speech-To-Text (STT)
+
 Murmure uses NVIDIA's Parakeet TDT, a highly optimized, experimental transformer-based speech recognition model designed for low-latency, on-device inference. It combines fast transcription with strong accuracy across multiple languages, running efficiently on consumer GPUs or CPUs.
+
+### Text-To-Speech (TTS)
+
+Murmure uses [Piper TTS](https://github.com/rhasspy/piper), a fast, local neural text-to-speech system. Piper provides high-quality voice synthesis with low latency, running entirely on-device for complete privacy. Models are available for many languages and voices from the [Piper Voices Repository](https://huggingface.co/rhasspy/piper-voices).
+
+### Unified Core Library
+
+The project uses a unified `murmure-core` crate that provides both STT and TTS functionality:
+- `murmure-core/src/stt/` - Speech-to-text modules
+- `murmure-core/src/tts/` - Text-to-speech modules
+
+This unified structure allows for easy integration of both capabilities in your applications.
 
 ## License
 
@@ -211,4 +312,5 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ## Acknowledgments
 
 - Thanks to [NVIDIA](https://www.nvidia.com/) for the Parakeet TDT model
+- Thanks to [Piper TTS](https://github.com/rhasspy/piper) and the [Piper Voices Repository](https://huggingface.co/rhasspy/piper-voices) for TTS models
 - Thanks to the [original Murmure project](https://github.com/Kieirra/murmure) for the excellent desktop application

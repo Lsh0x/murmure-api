@@ -596,7 +596,7 @@ fn init_tts_service() -> Result<Arc<SynthesisService>> {
 async fn synthesize_and_play(
     tts_service: &SynthesisService,
     text: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Synthesize text to audio
     let wav_bytes = tts_service
         .synthesize_text(text)
@@ -608,7 +608,7 @@ async fn synthesize_and_play(
     Ok(())
 }
 
-fn play_wav_bytes(wav_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+fn play_wav_bytes(wav_bytes: &[u8]) -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Read WAV file from bytes
     let cursor = Cursor::new(wav_bytes);
     let mut reader = WavReader::new(cursor)?;
@@ -619,9 +619,9 @@ fn play_wav_bytes(wav_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         .samples::<i16>()
         .map(|s| {
             s.map(|sample| sample as f32 / i16::MAX as f32)
-                .map_err(|e| format!("Failed to read WAV sample: {}", e))
+                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to read WAV sample: {}", e))) as Box<dyn std::error::Error>)
         })
-        .collect::<Result<Vec<f32>, _>>()?;
+        .collect::<std::result::Result<Vec<f32>, Box<dyn std::error::Error>>>()?;
 
     if samples.is_empty() {
         return Err("No audio samples to play".into());

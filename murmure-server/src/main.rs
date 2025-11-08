@@ -6,11 +6,14 @@ use murmure_core::stt::config::ServerConfig;
 use murmure_core::stt::dictionary::Dictionary;
 use murmure_core::stt::model::Model;
 use murmure_core::stt::transcription::TranscriptionService;
+use murmure_core::tts::config::TtsConfig;
+use murmure_core::tts::model::TtsModel;
+use murmure_core::tts::synthesis::SynthesisService;
 
 mod server;
 
 use server::murmure;
-use server::TranscriptionServiceImpl;
+use server::{SynthesisServiceImpl, TranscriptionServiceImpl};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -70,8 +73,29 @@ async fn main() -> anyhow::Result<()> {
     );
     info!("Transcription service ready");
 
-    // Create gRPC service
-    let grpc_service = TranscriptionServiceImpl::new(transcription_service);
+    // Create gRPC transcription service
+    let grpc_transcription_service = TranscriptionServiceImpl::new(transcription_service);
+
+    // Initialize TTS service (optional)
+    let grpc_synthesis_service = match TtsConfig::from_env() {
+        Ok(tts_config) => {
+            let tts_model = Arc::new(TtsModel::new(tts_config.clone()));
+            match SynthesisService::new(tts_model, Arc::new(tts_config)) {
+                Ok(tts_service) => {
+                    info!("TTS service ready");
+                    Some(SynthesisServiceImpl::new(Arc::new(tts_service)))
+                }
+                Err(e) => {
+                    info!("TTS service not available: {} (continuing without TTS)", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            info!("TTS configuration not found: {} (continuing without TTS)", e);
+            None
+        }
+    };
 
     // Create gRPC server
     eprintln!("[DEBUG] Creating gRPC server...");
@@ -140,22 +164,44 @@ async fn main() -> anyhow::Result<()> {
     };
 
     eprintln!("[DEBUG] Building server...");
-    let server = Server::builder().add_service(
-        murmure::transcription_service_server::TranscriptionServiceServer::new(grpc_service),
-    );
+    
+    // Build server with transcription service (always available)
+    let mut server = Server::builder()
+        .add_service(
+            murmure::transcription_service_server::TranscriptionServiceServer::new(
+                grpc_transcription_service,
+            ),
+        );
+    
+    // Add synthesis service (if available)
+    if let Some(synthesis_service) = grpc_synthesis_service {
+        server = server.add_service(
+            murmure::synthesis_service_server::SynthesisServiceServer::new(synthesis_service),
+        );
+        info!("TTS gRPC service registered");
+    }
 
     eprintln!("[DEBUG] Starting server with shutdown handler...");
 
     // Start the server - this will block until shutdown signal is received
-    match server.serve_with_shutdown(addr, shutdown).await {
-        Ok(_) => {
-            eprintln!("[DEBUG] Server exited normally");
-            info!("Server shut down");
+    // Use tokio::select to handle shutdown signal
+    tokio::select! {
+        result = server.serve(addr) => {
+            match result {
+                Ok(_) => {
+                    eprintln!("[DEBUG] Server exited normally");
+                    info!("Server shut down");
+                }
+                Err(e) => {
+                    eprintln!("[ERROR] Server error: {}", e);
+                    error!("Server error: {}", e);
+                    return Err(anyhow::anyhow!("Server failed: {}", e));
+                }
+            }
         }
-        Err(e) => {
-            eprintln!("[ERROR] Server error: {}", e);
-            error!("Server error: {}", e);
-            return Err(anyhow::anyhow!("Server failed: {}", e));
+        _ = shutdown => {
+            eprintln!("[DEBUG] Shutdown signal received, stopping server");
+            info!("Shutdown signal received");
         }
     }
 

@@ -25,7 +25,6 @@
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavReader, WavSpec, WavWriter};
-use murmure_core::tts::{SynthesisService, TtsConfig, TtsModel};
 use std::fs::File;
 use std::io::BufWriter;
 use std::sync::Arc;
@@ -37,8 +36,9 @@ pub mod murmure {
     include!(concat!(env!("OUT_DIR"), "/murmure.rs"));
 }
 
+use murmure::synthesis_service_client::SynthesisServiceClient;
 use murmure::transcription_service_client::TranscriptionServiceClient;
-use murmure::TranscribeFileRequest;
+use murmure::{SynthesizeTextRequest, TranscribeFileRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,7 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to server
     println!("📡 Connecting to server...");
-    let mut client = TranscriptionServiceClient::connect(server_address).await?;
+    let mut transcription_client = TranscriptionServiceClient::connect(server_address.clone()).await?;
+    let mut synthesis_client = SynthesisServiceClient::connect(server_address).await?;
     println!("✅ Connected to server");
 
     // Transcribe
@@ -79,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         use_dictionary: true,
     });
 
-    let response = client.transcribe_file(request).await?;
+    let response = transcription_client.transcribe_file(request).await?;
     let transcription = response.into_inner();
 
     if transcription.success {
@@ -94,9 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             println!("{}", transcription.text);
             
-            // Synthesize and play using TTS
-            println!("\n🔊 Synthesizing speech...");
-            if let Err(e) = synthesize_and_play(&transcription.text).await {
+            // Synthesize and play using TTS via gRPC
+            println!("\n🔊 Synthesizing speech via gRPC...");
+            if let Err(e) = synthesize_and_play_grpc(&mut synthesis_client, &transcription.text).await {
                 eprintln!("⚠️  TTS error: {} (continuing anyway)", e);
             }
         }
@@ -110,23 +111,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn synthesize_and_play(text: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize TTS service
-    let tts_config = TtsConfig::from_env().unwrap_or_default();
-    let tts_model = Arc::new(TtsModel::new(tts_config.clone()));
-    let tts_service = SynthesisService::new(tts_model, Arc::new(tts_config))
-        .map_err(|e| format!("Failed to initialize TTS: {}", e))?;
+async fn synthesize_and_play_grpc(
+    client: &mut SynthesisServiceClient<tonic::transport::Channel>,
+    text: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Synthesize text to audio via gRPC
+    let request = Request::new(SynthesizeTextRequest {
+        text: text.to_string(),
+        speaker_id: None,
+        speed: None,
+    });
 
-    // Synthesize text to audio
-    let wav_bytes = tts_service
-        .synthesize_text(text)
-        .map_err(|e| format!("Synthesis failed: {}", e))?;
+    let response = client.synthesize_text(request).await?;
+    let synthesis = response.into_inner();
 
-    println!("✅ Synthesis complete ({} bytes)", wav_bytes.len());
+    if !synthesis.success {
+        return Err(format!("Synthesis failed: {}", synthesis.error).into());
+    }
+
+    println!("✅ Synthesis complete ({} bytes, {} Hz)", synthesis.audio_data.len(), synthesis.sample_rate);
 
     // Play the audio
     println!("🔊 Playing audio...");
-    play_wav_bytes(&wav_bytes)?;
+    play_wav_bytes(&synthesis.audio_data)?;
     println!("✅ Playback complete");
 
     Ok(())

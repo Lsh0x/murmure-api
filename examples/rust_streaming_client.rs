@@ -35,7 +35,6 @@ use cpal::{SampleFormat, SupportedStreamConfig};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use hound::{WavReader, WavSpec, WavWriter};
-use murmure_core::tts::{SynthesisService, TtsConfig, TtsModel};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
@@ -46,8 +45,9 @@ pub mod murmure {
     include!(concat!(env!("OUT_DIR"), "/murmure.rs"));
 }
 
+use murmure::synthesis_service_client::SynthesisServiceClient;
 use murmure::transcription_service_client::TranscriptionServiceClient;
-use murmure::{TranscribeStreamRequest, TranscribeStreamResponse};
+use murmure::{SynthesizeTextRequest, TranscribeStreamRequest, TranscribeStreamResponse};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 type SendResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -130,29 +130,27 @@ async fn main() -> Result<()> {
     print_welcome(&server_address);
 
     let audio_config = setup_audio()?;
-    let mut client = connect_to_server(&server_address).await?;
+    let (mut transcription_client, synthesis_client) = connect_to_server(&server_address).await?;
 
     print_instructions();
 
     enable_raw_mode()?;
     let shutdown_flag = setup_shutdown_handler();
 
-    let result = run_recording_loop(&mut client, &audio_config, shutdown_flag).await;
+    let result = run_recording_loop(&mut transcription_client, synthesis_client, &audio_config, shutdown_flag).await;
 
     disable_raw_mode()?;
     result
 }
 
 async fn run_recording_loop(
-    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    transcription_client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    mut synthesis_client: Option<SynthesisServiceClient<tonic::transport::Channel>>,
     audio_config: &AudioConfig,
     shutdown_flag: Arc<AtomicBool>,
 ) -> Result<()> {
     let mut conversation_text = String::new();
     let mut recording_state = RecordingState::new();
-    
-    // Initialize TTS service (optional, will fail gracefully if not available)
-    let tts_service = init_tts_service().ok();
 
     loop {
         if shutdown_flag.load(Ordering::Relaxed) {
@@ -172,9 +170,9 @@ async fn run_recording_loop(
                         handle_space_press(
                             &mut recording_state,
                             audio_config,
-                            client,
+                            transcription_client,
+                            &mut synthesis_client,
                             &mut conversation_text,
-                            &tts_service,
                         )
                         .await?;
                     }
@@ -194,16 +192,16 @@ async fn run_recording_loop(
 async fn handle_space_press(
     state: &mut RecordingState,
     audio_config: &AudioConfig,
-    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    transcription_client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    synthesis_client: &mut Option<SynthesisServiceClient<tonic::transport::Channel>>,
     conversation_text: &mut String,
-    tts_service: &Option<Arc<SynthesisService>>,
 ) -> Result<()> {
     disable_raw_mode()?;
 
     if !state.is_recording {
         start_recording(state, audio_config)?;
     } else {
-        stop_and_transcribe(state, client, conversation_text, tts_service).await?;
+        stop_and_transcribe(state, transcription_client, synthesis_client, conversation_text).await?;
     }
 
     enable_raw_mode()?;
@@ -222,9 +220,9 @@ fn start_recording(state: &mut RecordingState, audio_config: &AudioConfig) -> Re
 
 async fn stop_and_transcribe(
     state: &mut RecordingState,
-    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    transcription_client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    synthesis_client: &mut Option<SynthesisServiceClient<tonic::transport::Channel>>,
     conversation_text: &mut String,
-    tts_service: &Option<Arc<SynthesisService>>,
 ) -> Result<()> {
     println!("\n   ⏹️  Stopping recording...");
     io::stdout().flush()?;
@@ -251,17 +249,17 @@ async fn stop_and_transcribe(
     print!("   📤 Sending to server for transcription...");
     io::stdout().flush()?;
 
-    match transcribe_audio(client, audio_data).await {
+    match transcribe_audio(transcription_client, audio_data).await {
         Ok(text) if !text.trim().is_empty() => {
             println!("\r   ✅ Transcription #{}: {}", state.count, text);
             conversation_text.push_str(&text);
             conversation_text.push(' ');
             
-            // Synthesize and play using TTS
-            if let Some(service) = tts_service {
-                print!("   🔊 Synthesizing and playing...");
+            // Synthesize and play using TTS via gRPC
+            if let Some(ref mut client) = synthesis_client {
+                print!("   🔊 Synthesizing and playing via gRPC...");
                 io::stdout().flush()?;
-                if let Err(e) = synthesize_and_play(service, &text).await {
+                if let Err(e) = synthesize_and_play_grpc(client, &text).await {
                     println!("\r   ⚠️  TTS error: {} (continuing anyway)", e);
                 } else {
                     println!("\r   ✅ TTS playback complete");
@@ -346,11 +344,22 @@ fn setup_audio() -> Result<AudioConfig> {
 
 async fn connect_to_server(
     address: &str,
-) -> Result<TranscriptionServiceClient<tonic::transport::Channel>> {
+) -> Result<(
+    TranscriptionServiceClient<tonic::transport::Channel>,
+    Option<SynthesisServiceClient<tonic::transport::Channel>>,
+)> {
     println!("📡 Connecting to server...");
-    let client = TranscriptionServiceClient::connect(address.to_string()).await?;
-    println!("✅ Connected to server\n");
-    Ok(client)
+    let transcription_client = TranscriptionServiceClient::connect(address.to_string()).await?;
+    
+    // Try to connect to TTS service (optional)
+    let synthesis_client = SynthesisServiceClient::connect(address.to_string()).await.ok();
+    if synthesis_client.is_some() {
+        println!("✅ Connected to server (STT + TTS)\n");
+    } else {
+        println!("✅ Connected to server (STT only, TTS not available)\n");
+    }
+    
+    Ok((transcription_client, synthesis_client))
 }
 
 fn setup_shutdown_handler() -> Arc<AtomicBool> {
@@ -582,28 +591,29 @@ async fn process_transcription_responses(
 }
 
 // ============================================================================
-// TTS (Text-To-Speech)
+// TTS (Text-To-Speech) via gRPC
 // ============================================================================
 
-fn init_tts_service() -> Result<Arc<SynthesisService>> {
-    let tts_config = TtsConfig::from_env().unwrap_or_default();
-    let tts_model = Arc::new(TtsModel::new(tts_config.clone()));
-    let service = SynthesisService::new(tts_model, Arc::new(tts_config))
-        .map_err(|e| format!("Failed to initialize TTS: {}", e))?;
-    Ok(Arc::new(service))
-}
-
-async fn synthesize_and_play(
-    tts_service: &SynthesisService,
+async fn synthesize_and_play_grpc(
+    client: &mut SynthesisServiceClient<tonic::transport::Channel>,
     text: &str,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    // Synthesize text to audio
-    let wav_bytes = tts_service
-        .synthesize_text(text)
-        .map_err(|e| format!("Synthesis failed: {}", e))?;
+    // Synthesize text to audio via gRPC
+    let request = Request::new(SynthesizeTextRequest {
+        text: text.to_string(),
+        speaker_id: None,
+        speed: None,
+    });
+
+    let response = client.synthesize_text(request).await?;
+    let synthesis = response.into_inner();
+
+    if !synthesis.success {
+        return Err(format!("Synthesis failed: {}", synthesis.error).into());
+    }
 
     // Play the audio
-    play_wav_bytes(&wav_bytes)?;
+    play_wav_bytes(&synthesis.audio_data)?;
 
     Ok(())
 }

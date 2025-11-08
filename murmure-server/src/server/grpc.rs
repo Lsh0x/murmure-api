@@ -1,4 +1,4 @@
-use murmure_stt::transcription::TranscriptionService;
+use murmure_core::stt::transcription::TranscriptionService;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;

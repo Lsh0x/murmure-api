@@ -80,13 +80,13 @@ impl RecordingState {
     fn start(&mut self, device: &cpal::Device, config: &SupportedStreamConfig) {
         self.count += 1;
         self.is_recording = true;
-        
+
         let stop_flag = Arc::new(AtomicBool::new(false));
         self.stop_flag = Some(stop_flag.clone());
-        
+
         let device_clone = device.clone();
         let config_clone = config.clone();
-        
+
         self.handle = Some(tokio::spawn(async move {
             tokio::task::spawn_blocking(move || {
                 record_audio(&device_clone, &config_clone, stop_flag)
@@ -103,18 +103,19 @@ impl RecordingState {
 
     async fn stop(&mut self) -> Option<SendResult<Vec<u8>>> {
         self.is_recording = false;
-        
+
         if let Some(flag) = self.stop_flag.take() {
             flag.store(true, Ordering::Relaxed);
         }
-        
+
         if let Some(handle) = self.handle.take() {
             let result = match handle.await {
                 Ok(inner_result) => inner_result,
                 Err(e) => Err(Box::new(io::Error::new(
                     io::ErrorKind::Other,
                     format!("Join error: {}", e),
-                )) as Box<dyn std::error::Error + Send + Sync>),
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>),
             };
             Some(result)
         } else {
@@ -134,17 +135,13 @@ async fn main() -> Result<()> {
 
     let audio_config = setup_audio()?;
     let mut client = connect_to_server(&server_address).await?;
-    
+
     print_instructions();
-    
+
     enable_raw_mode()?;
     let shutdown_flag = setup_shutdown_handler();
 
-    let result = run_recording_loop(
-        &mut client,
-        &audio_config,
-        shutdown_flag,
-    ).await;
+    let result = run_recording_loop(&mut client, &audio_config, shutdown_flag).await;
 
     disable_raw_mode()?;
     result
@@ -178,7 +175,8 @@ async fn run_recording_loop(
                             audio_config,
                             client,
                             &mut conversation_text,
-                        ).await?;
+                        )
+                        .await?;
                     }
                     KeyCode::Esc => {
                         handle_shutdown(&mut recording_state, &conversation_text).await?;
@@ -230,7 +228,7 @@ async fn stop_and_transcribe(
     io::stdout().flush()?;
 
     let audio_result = state.stop().await;
-    
+
     let audio_data = match audio_result {
         Some(Ok(data)) => data,
         Some(Err(e)) => {
@@ -269,15 +267,12 @@ async fn stop_and_transcribe(
     Ok(())
 }
 
-async fn handle_shutdown(
-    state: &mut RecordingState,
-    conversation_text: &str,
-) -> Result<()> {
+async fn handle_shutdown(state: &mut RecordingState, conversation_text: &str) -> Result<()> {
     if state.is_recording {
         println!("\n🛑 Stopping recording...");
         state.stop().await;
     }
-    
+
     println!("\n📝 Conversation transcript:\n{}", conversation_text);
     Ok(())
 }
@@ -309,7 +304,7 @@ fn print_instructions() {
 
 fn setup_audio() -> Result<AudioConfig> {
     let host = cpal::default_host();
-    
+
     let input_devices: Vec<_> = host.input_devices()?.collect();
     if input_devices.is_empty() {
         return Err("❌ No input devices found. Please check microphone permissions.".into());
@@ -323,7 +318,10 @@ fn setup_audio() -> Result<AudioConfig> {
     println!("📱 Device: {}", device_name);
 
     let config = device.default_input_config().map_err(|e| {
-        format!("❌ Failed to get input config: {}\n   Check microphone permissions.", e)
+        format!(
+            "❌ Failed to get input config: {}\n   Check microphone permissions.",
+            e
+        )
     })?;
 
     println!("   Sample rate: {} Hz", config.sample_rate().0);
@@ -344,7 +342,7 @@ async fn connect_to_server(
 fn setup_shutdown_handler() -> Arc<AtomicBool> {
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let flag_clone = shutdown_flag.clone();
-    
+
     tokio::spawn(async move {
         if let Err(e) = tokio::signal::ctrl_c().await {
             eprintln!("Failed to listen for Ctrl+C: {}", e);
@@ -352,7 +350,7 @@ fn setup_shutdown_handler() -> Arc<AtomicBool> {
         }
         flag_clone.store(true, Ordering::Relaxed);
     });
-    
+
     shutdown_flag
 }
 
@@ -372,19 +370,21 @@ fn record_audio(
 ) -> SendResult<Vec<u8>> {
     let temp_file = create_temp_wav_file()?;
     let spec = create_wav_spec(config);
-    
+
     let writer = WavWriter::new(BufWriter::new(File::create(&temp_file)?), spec)?;
     let writer_arc = Arc::new(Mutex::new(writer));
 
     let stream = create_audio_stream(device, config, writer_arc.clone())?;
-    stream.play().map_err(|e| format!("❌ Failed to start recording: {}", e))?;
+    stream
+        .play()
+        .map_err(|e| format!("❌ Failed to start recording: {}", e))?;
 
     wait_for_stop_signal(&stop_flag);
     drop(stream);
     std::thread::sleep(Duration::from_millis(200));
 
     finalize_wav_file(writer_arc)?;
-    
+
     let audio_data = std::fs::read(&temp_file)?;
     let _ = std::fs::remove_file(&temp_file);
 
@@ -395,7 +395,7 @@ fn create_temp_wav_file() -> SendResult<std::path::PathBuf> {
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
-    
+
     Ok(std::env::temp_dir().join(format!(
         "murmure-record-{}-{}.wav",
         std::process::id(),
@@ -457,19 +457,16 @@ fn process_audio_data<T>(
     f32: cpal::FromSample<T>,
 {
     let mut writer = writer.lock().unwrap();
-    
+
     for frame in data.chunks_exact(channels) {
         let sample = if channels == 1 {
             frame[0].to_sample::<f32>()
         } else {
-            frame.iter()
-                .map(|&s| s.to_sample::<f32>())
-                .sum::<f32>() / channels as f32
+            frame.iter().map(|&s| s.to_sample::<f32>()).sum::<f32>() / channels as f32
         };
 
-        let sample_i16 = (sample * i16::MAX as f32)
-            .clamp(i16::MIN as f32, i16::MAX as f32) as i16;
-        
+        let sample_i16 = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+
         let _ = writer.write_sample(sample_i16);
     }
 }
@@ -480,17 +477,14 @@ fn wait_for_stop_signal(stop_flag: &Arc<AtomicBool>) {
     }
 }
 
-fn finalize_wav_file(
-    writer_arc: Arc<Mutex<WavWriter<BufWriter<File>>>>,
-) -> SendResult<()> {
+fn finalize_wav_file(writer_arc: Arc<Mutex<WavWriter<BufWriter<File>>>>) -> SendResult<()> {
     {
         let mut writer = writer_arc.lock().unwrap();
         writer.flush()?;
     }
 
-    let writer = Arc::try_unwrap(writer_arc)
-        .map_err(|_| "Failed to unwrap Arc")?;
-    
+    let writer = Arc::try_unwrap(writer_arc).map_err(|_| "Failed to unwrap Arc")?;
+
     writer.into_inner().unwrap().finalize()?;
     Ok(())
 }
@@ -512,11 +506,9 @@ async fn transcribe_audio(
     process_transcription_responses(&mut response_stream).await
 }
 
-fn create_transcription_stream(
-    audio_data: Vec<u8>,
-) -> ReceiverStream<TranscribeStreamRequest> {
+fn create_transcription_stream(audio_data: Vec<u8>) -> ReceiverStream<TranscribeStreamRequest> {
     let (chunk_tx, chunk_rx) = mpsc::channel(128);
-    
+
     tokio::spawn(async move {
         send_audio_chunks(&chunk_tx, audio_data).await;
         send_end_of_stream(&chunk_tx).await;
@@ -525,21 +517,16 @@ fn create_transcription_stream(
     ReceiverStream::new(chunk_rx)
 }
 
-async fn send_audio_chunks(
-    tx: &mpsc::Sender<TranscribeStreamRequest>,
-    audio_data: Vec<u8>,
-) {
+async fn send_audio_chunks(tx: &mpsc::Sender<TranscribeStreamRequest>, audio_data: Vec<u8>) {
     const CHUNK_SIZE: usize = 16384; // 16KB chunks
-    
+
     for chunk in audio_data.chunks(CHUNK_SIZE) {
         let request = TranscribeStreamRequest {
-            request_type: Some(
-                murmure::transcribe_stream_request::RequestType::AudioChunk(
-                    chunk.to_vec()
-                )
-            ),
+            request_type: Some(murmure::transcribe_stream_request::RequestType::AudioChunk(
+                chunk.to_vec(),
+            )),
         };
-        
+
         if tx.send(request).await.is_err() {
             return;
         }
@@ -547,11 +534,11 @@ async fn send_audio_chunks(
 }
 
 async fn send_end_of_stream(tx: &mpsc::Sender<TranscribeStreamRequest>) {
-    let _ = tx.send(TranscribeStreamRequest {
-        request_type: Some(
-            murmure::transcribe_stream_request::RequestType::EndOfStream(true)
-        ),
-    }).await;
+    let _ = tx
+        .send(TranscribeStreamRequest {
+            request_type: Some(murmure::transcribe_stream_request::RequestType::EndOfStream(true)),
+        })
+        .await;
 }
 
 async fn process_transcription_responses(
@@ -561,7 +548,7 @@ async fn process_transcription_responses(
 
     while let Some(result) = stream.message().await.transpose() {
         let response = result?;
-        
+
         match response.response_type {
             Some(murmure::transcribe_stream_response::ResponseType::FinalText(text)) => {
                 final_text = text;
@@ -571,7 +558,7 @@ async fn process_transcription_responses(
             }
             _ => {}
         }
-        
+
         if response.is_final {
             break;
         }

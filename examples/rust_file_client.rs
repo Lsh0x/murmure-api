@@ -31,8 +31,8 @@
 //! - `--stream` - Use streaming RPC instead of file-based
 
 use std::path::PathBuf;
-use tonic::Request;
 use tokio_stream::wrappers::ReceiverStream;
+use tonic::Request;
 
 // Include generated proto code from build script
 pub mod murmure {
@@ -47,8 +47,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("Usage: {} <audio_file> [--server <address>] [--no-dictionary] [--stream]", args[0]);
-        eprintln!("Example: {} audio.wav --server http://localhost:50051", args[0]);
+        eprintln!(
+            "Usage: {} <audio_file> [--server <address>] [--no-dictionary] [--stream]",
+            args[0]
+        );
+        eprintln!(
+            "Example: {} audio.wav --server http://localhost:50051",
+            args[0]
+        );
         std::process::exit(1);
     }
 
@@ -72,7 +78,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Audio file: {}", audio_file.display());
     println!("Server: {}", server_address);
     println!("Use dictionary: {}", use_dictionary);
-    println!("Mode: {}\n", if use_streaming { "Streaming" } else { "File-based" });
+    println!(
+        "Mode: {}\n",
+        if use_streaming {
+            "Streaming"
+        } else {
+            "File-based"
+        }
+    );
 
     // Read audio file
     println!("📖 Reading audio file...");
@@ -127,7 +140,7 @@ async fn transcribe_stream(
     println!("🔊 Sending audio for transcription (streaming)...");
 
     use tokio::sync::mpsc;
-    
+
     // Split audio into chunks
     let chunk_size = 8192;
     let chunks: Vec<Vec<u8>> = audio_data
@@ -137,21 +150,27 @@ async fn transcribe_stream(
 
     // Create channel for request stream
     let (mut tx, rx) = mpsc::channel(128);
-    
+
     // Spawn task to send chunks
     tokio::spawn(async move {
         for chunk in chunks {
             let request = TranscribeStreamRequest {
-                request_type: Some(murmure::transcribe_stream_request::RequestType::AudioChunk(chunk)),
+                request_type: Some(murmure::transcribe_stream_request::RequestType::AudioChunk(
+                    chunk,
+                )),
             };
             if tx.send(request).await.is_err() {
                 break;
             }
         }
         // Send end of stream
-        let _ = tx.send(TranscribeStreamRequest {
-            request_type: Some(murmure::transcribe_stream_request::RequestType::EndOfStream(true)),
-        }).await;
+        let _ = tx
+            .send(TranscribeStreamRequest {
+                request_type: Some(
+                    murmure::transcribe_stream_request::RequestType::EndOfStream(true),
+                ),
+            })
+            .await;
     });
 
     let request = Request::new(ReceiverStream::new(rx));

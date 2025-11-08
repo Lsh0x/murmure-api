@@ -1,6 +1,6 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{env, fs, path::PathBuf};
-use anyhow::{Context, Result};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(default)]
@@ -53,8 +53,9 @@ impl ServerConfig {
         }
 
         // Try to load from config file (optional)
-        if let Some(file_config) = Self::load_from_file("config.json")
-            .or_else(|| Self::load_from_file("config.toml")) {
+        if let Some(file_config) =
+            Self::load_from_file("config.json").or_else(|| Self::load_from_file("config.toml"))
+        {
             // Merge file config with env config (env takes precedence)
             config = file_config.merge_with_env(config);
         }
@@ -106,7 +107,7 @@ impl ServerConfig {
 
         // Try default locations
         const MODEL_FILENAME: &str = "parakeet-tdt-0.6b-v3-int8";
-        
+
         let possible_paths = vec![
             PathBuf::from(format!("resources/{}", MODEL_FILENAME)),
             PathBuf::from(format!("../resources/{}", MODEL_FILENAME)),
@@ -180,4 +181,3 @@ impl ServerConfig {
         )
     }
 }
-

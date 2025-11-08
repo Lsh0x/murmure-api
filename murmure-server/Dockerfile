@@ -8,14 +8,14 @@ FROM chef AS planner
 WORKDIR /app
 # Copy only files that affect dependency resolution (keep this minimal!)
 COPY Cargo.toml Cargo.lock ./
-COPY murmure-lib/Cargo.toml ./murmure-lib/
+COPY murmure-tts/Cargo.toml ./murmure-tts/
 COPY murmure-server/Cargo.toml ./murmure-server/
 COPY murmure-server/build.rs ./murmure-server/
 # If build-deps read proto schema at build-time, include it here so cache invalidates when it changes
 COPY proto ./proto
 RUN cargo chef prepare --recipe-path recipe.json
 
-# 2) Cook dependency layer (this compiles murmure-lib as a path dependency)
+# 2) Cook dependency layer (this compiles murmure-tts as a path dependency)
 FROM chef AS cacher
 WORKDIR /app
 COPY --from=planner /app/recipe.json recipe.json

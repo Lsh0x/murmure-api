@@ -77,22 +77,27 @@ async fn main() -> anyhow::Result<()> {
     let grpc_transcription_service = TranscriptionServiceImpl::new(transcription_service);
 
     // Initialize TTS service (optional)
+    eprintln!("[DEBUG] Initializing TTS service...");
     let grpc_synthesis_service = match TtsConfig::from_env() {
         Ok(tts_config) => {
+            eprintln!("[DEBUG] TTS config loaded, model_path: {:?}", tts_config.model_path);
             let tts_model = Arc::new(TtsModel::new(tts_config.clone()));
             match SynthesisService::new(tts_model, Arc::new(tts_config)) {
                 Ok(tts_service) => {
                     info!("TTS service ready");
+                    eprintln!("[DEBUG] TTS service initialized successfully");
                     Some(SynthesisServiceImpl::new(Arc::new(tts_service)))
                 }
                 Err(e) => {
                     info!("TTS service not available: {} (continuing without TTS)", e);
+                    eprintln!("[DEBUG] TTS service initialization failed: {}", e);
                     None
                 }
             }
         }
         Err(e) => {
             info!("TTS configuration not found: {} (continuing without TTS)", e);
+            eprintln!("[DEBUG] TTS config not found: {}", e);
             None
         }
     };
@@ -175,10 +180,14 @@ async fn main() -> anyhow::Result<()> {
     
     // Add synthesis service (if available)
     if let Some(synthesis_service) = grpc_synthesis_service {
+        eprintln!("[DEBUG] Registering TTS gRPC service...");
         server = server.add_service(
             murmure::synthesis_service_server::SynthesisServiceServer::new(synthesis_service),
         );
         info!("TTS gRPC service registered");
+        eprintln!("[DEBUG] TTS gRPC service registered successfully");
+    } else {
+        eprintln!("[DEBUG] TTS gRPC service NOT registered (service unavailable)");
     }
 
     eprintln!("[DEBUG] Starting server with shutdown handler...");

@@ -149,7 +149,7 @@ async fn transcribe_stream(
         .collect();
 
     // Create channel for request stream
-    let (mut tx, rx) = mpsc::channel(128);
+    let (tx, rx) = mpsc::channel(128);
 
     // Spawn task to send chunks
     tokio::spawn(async move {

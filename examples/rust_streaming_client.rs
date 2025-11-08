@@ -93,10 +93,8 @@ impl RecordingState {
             })
             .await
             .map_err(|e| {
-                Box::new(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Task error: {}", e),
-                )) as Box<dyn std::error::Error + Send + Sync>
+                Box::new(io::Error::other(format!("Task error: {}", e)))
+                    as Box<dyn std::error::Error + Send + Sync>
             })?
         }));
     }
@@ -111,10 +109,7 @@ impl RecordingState {
         if let Some(handle) = self.handle.take() {
             let result = match handle.await {
                 Ok(inner_result) => inner_result,
-                Err(e) => Err(Box::new(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Join error: {}", e),
-                ))
+                Err(e) => Err(Box::new(io::Error::other(format!("Join error: {}", e)))
                     as Box<dyn std::error::Error + Send + Sync>),
             };
             Some(result)

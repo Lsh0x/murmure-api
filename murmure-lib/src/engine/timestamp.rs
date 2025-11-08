@@ -1,5 +1,5 @@
-use super::engine::TimestampGranularity;
 use super::model::TimestampedResult;
+use super::parakeet::TimestampGranularity;
 use super::transcription_engine::TranscriptionSegment;
 
 #[derive(Debug, Clone, PartialEq)]

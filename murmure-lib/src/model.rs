@@ -2,8 +2,6 @@ use crate::config::ServerConfig;
 use anyhow::Result;
 use std::path::PathBuf;
 
-const MODEL_FILENAME: &str = "parakeet-tdt-0.6b-v3-int8";
-
 pub struct Model {
     config: ServerConfig,
 }

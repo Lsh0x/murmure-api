@@ -301,12 +301,14 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
 }
 
 type WavWriterType = WavWriter<BufWriter<File>>;
+type StreamResult =
+    Result<(cpal::Stream, Arc<std::sync::Mutex<(usize, i16)>>), Box<dyn std::error::Error>>;
 
 fn build_stream<T>(
     device: &cpal::Device,
     config: &cpal::SupportedStreamConfig,
     writer: Arc<std::sync::Mutex<WavWriterType>>,
-) -> Result<(cpal::Stream, Arc<std::sync::Mutex<(usize, i16)>>), Box<dyn std::error::Error>>
+) -> StreamResult
 where
     T: cpal::Sample + cpal::SizedSample + Send + 'static,
     f32: cpal::FromSample<T>,

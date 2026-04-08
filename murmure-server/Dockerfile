@@ -11,6 +11,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY murmure-stt/Cargo.toml ./murmure-stt/
 COPY murmure-server/Cargo.toml ./murmure-server/
 COPY murmure-server/build.rs ./murmure-server/
+COPY examples/Cargo.toml ./examples/
 # If build-deps read proto schema at build-time, include it here so cache invalidates when it changes
 COPY proto ./proto
 RUN cargo chef prepare --recipe-path recipe.json

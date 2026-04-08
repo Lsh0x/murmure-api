@@ -1,5 +1,5 @@
 # Multi-stage build for Murmure gRPC Server using cargo-chef
-FROM rust:1.85 AS chef
+FROM rust:1.88 AS chef
 WORKDIR /app
 RUN cargo install cargo-chef --locked
 

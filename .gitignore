@@ -34,7 +34,7 @@ resources/parakeet-tdt-0.6b-v3-int8/
 # Rust build artifacts
 target/
 **/target/
-Cargo.lock
+# Cargo.lock — committed for reproducible Docker builds
 **/*.rs.bk
 
 # Rust incremental compilation

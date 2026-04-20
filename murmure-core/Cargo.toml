@@ -1,12 +1,12 @@
 [package]
-name = "murmure-stt"
+name = "murmure-core"
 version = "1.4.0"
-description = "Privacy-first speech-to-text library, running entirely on your machine"
+description = "Privacy-first speech-to-text and text-to-speech library, running entirely on your machine"
 authors = ["al1x-ai.com"]
 edition = "2021"
 
 [lib]
-name = "murmure_stt"
+name = "murmure_core"
 path = "src/lib.rs"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -25,3 +25,5 @@ rphonetic = "3.0.4"
 parking_lot = "0.12"
 tempfile = "3.10"
 toml = "0.8"
+piper-tts-rust = "0.1.1"
+

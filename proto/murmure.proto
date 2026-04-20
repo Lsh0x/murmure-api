@@ -11,6 +11,15 @@ service TranscriptionService {
     rpc TranscribeStream(stream TranscribeStreamRequest) returns (stream TranscribeStreamResponse);
 }
 
+// Synthesis service for text-to-speech
+service SynthesisService {
+    // Synthesize text to audio (non-streaming)
+    rpc SynthesizeText(SynthesizeTextRequest) returns (SynthesizeTextResponse);
+    
+    // Bidirectional streaming for real-time text-to-speech synthesis
+    rpc SynthesizeStream(stream SynthesizeStreamRequest) returns (stream SynthesizeStreamResponse);
+}
+
 // Request for file-based transcription
 message TranscribeFileRequest {
     // Audio data as bytes (WAV format, 16kHz, mono, 16-bit)
@@ -51,5 +60,57 @@ message TranscribeStreamResponse {
     }
     // Indicates if this is a final result
     bool is_final = 4;
+}
+
+// Request for text-to-speech synthesis
+message SynthesizeTextRequest {
+    // Text to synthesize
+    string text = 1;
+    // Optional: Speaker ID for multi-voice models
+    optional uint32 speaker_id = 2;
+    // Optional: Speed multiplier (default: 1.0)
+    optional float speed = 3;
+}
+
+// Response for text-to-speech synthesis
+message SynthesizeTextResponse {
+    // Synthesized audio data as WAV bytes
+    bytes audio_data = 1;
+    // Sample rate of the audio
+    uint32 sample_rate = 2;
+    // Success indicator
+    bool success = 3;
+    // Error message if synthesis failed
+    string error = 4;
+}
+
+// Request for streaming synthesis
+message SynthesizeStreamRequest {
+    oneof request_type {
+        // Text chunk to synthesize
+        string text_chunk = 1;
+        // Signal that streaming is complete
+        bool end_of_stream = 2;
+    }
+    // Optional: Speaker ID for multi-voice models
+    optional uint32 speaker_id = 3;
+    // Optional: Speed multiplier (default: 1.0)
+    optional float speed = 4;
+}
+
+// Response for streaming synthesis
+message SynthesizeStreamResponse {
+    oneof response_type {
+        // Partial audio chunk (WAV bytes)
+        bytes audio_chunk = 1;
+        // Final audio chunk (WAV bytes)
+        bytes final_audio = 2;
+        // Error message
+        string error = 3;
+    }
+    // Sample rate of the audio
+    uint32 sample_rate = 4;
+    // Indicates if this is a final result
+    bool is_final = 5;
 }
 

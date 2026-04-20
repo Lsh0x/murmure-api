@@ -24,7 +24,7 @@
 //! See ../docs/examples/README_RUST_CLIENT.md for detailed documentation.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use hound::{WavSpec, WavWriter};
+use hound::{WavReader, WavSpec, WavWriter};
 use std::fs::File;
 use std::io::BufWriter;
 use std::sync::Arc;
@@ -36,8 +36,9 @@ pub mod murmure {
     include!(concat!(env!("OUT_DIR"), "/murmure.rs"));
 }
 
+use murmure::synthesis_service_client::SynthesisServiceClient;
 use murmure::transcription_service_client::TranscriptionServiceClient;
-use murmure::TranscribeFileRequest;
+use murmure::{SynthesizeTextRequest, TranscribeFileRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -68,7 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to server
     println!("📡 Connecting to server...");
-    let mut client = TranscriptionServiceClient::connect(server_address).await?;
+    let mut transcription_client = TranscriptionServiceClient::connect(server_address.clone()).await?;
+    let mut synthesis_client = SynthesisServiceClient::connect(server_address).await?;
     println!("✅ Connected to server");
 
     // Transcribe
@@ -78,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         use_dictionary: true,
     });
 
-    let response = client.transcribe_file(request).await?;
+    let response = transcription_client.transcribe_file(request).await?;
     let transcription = response.into_inner();
 
     if transcription.success {
@@ -92,6 +94,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("   - Try speaking louder or checking microphone levels");
         } else {
             println!("{}", transcription.text);
+            
+            // Synthesize and play using TTS via gRPC
+            println!("\n🔊 Synthesizing speech via gRPC...");
+            if let Err(e) = synthesize_and_play_grpc(&mut synthesis_client, &transcription.text).await {
+                eprintln!("⚠️  TTS error: {} (continuing anyway)", e);
+            }
         }
     } else {
         eprintln!("\n❌ Transcription failed: {}", transcription.error);
@@ -99,6 +107,113 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("   (No error message provided by server)");
         }
     }
+
+    Ok(())
+}
+
+async fn synthesize_and_play_grpc(
+    client: &mut SynthesisServiceClient<tonic::transport::Channel>,
+    text: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Synthesize text to audio via gRPC
+    let request = Request::new(SynthesizeTextRequest {
+        text: text.to_string(),
+        speaker_id: None,
+        speed: None,
+    });
+
+    let response = client.synthesize_text(request).await?;
+    let synthesis = response.into_inner();
+
+    if !synthesis.success {
+        return Err(format!("Synthesis failed: {}", synthesis.error).into());
+    }
+
+    println!("✅ Synthesis complete ({} bytes, {} Hz)", synthesis.audio_data.len(), synthesis.sample_rate);
+
+    // Play the audio
+    println!("🔊 Playing audio...");
+    play_wav_bytes(&synthesis.audio_data)?;
+    println!("✅ Playback complete");
+
+    Ok(())
+}
+
+fn play_wav_bytes(wav_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::Cursor;
+
+    // Read WAV file from bytes
+    let cursor = Cursor::new(wav_bytes);
+    let mut reader = WavReader::new(cursor)?;
+    let spec = reader.spec();
+
+    // Convert samples to f32
+    let samples: Vec<f32> = reader
+        .samples::<i16>()
+        .map(|s| {
+            s.map(|sample| sample as f32 / i16::MAX as f32)
+                .map_err(|e| format!("Failed to read WAV sample: {}", e))
+        })
+        .collect::<Result<Vec<f32>, _>>()?;
+
+    if samples.is_empty() {
+        return Err("No audio samples to play".into());
+    }
+
+    // Get default output device
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or("No default output device available")?;
+
+    let device_name = device.name().unwrap_or_else(|_| "Unknown".to_string());
+    println!("   Using output device: {}", device_name);
+
+    // Create output config matching WAV file
+    let config = cpal::StreamConfig {
+        channels: spec.channels as u16,
+        sample_rate: cpal::SampleRate(spec.sample_rate),
+        buffer_size: cpal::BufferSize::Default,
+    };
+
+    // Use a channel to feed samples to the stream
+    let (tx, rx) = std::sync::mpsc::channel();
+    let samples_len = samples.len();
+    
+    // Send samples in chunks
+    std::thread::spawn(move || {
+        for chunk in samples.chunks(1024) {
+            let chunk_vec = chunk.to_vec();
+            if tx.send(chunk_vec).is_err() {
+                break;
+            }
+        }
+    });
+
+    // Create output stream
+    let stream = device.build_output_stream(
+        &config,
+        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+            // Try to get samples from channel, otherwise fill with zeros
+            if let Ok(chunk) = rx.try_recv() {
+                let len = data.len().min(chunk.len());
+                data[..len].copy_from_slice(&chunk[..len]);
+                if len < data.len() {
+                    data[len..].fill(0.0);
+                }
+            } else {
+                data.fill(0.0);
+            }
+        },
+        |err| eprintln!("Playback error: {}", err),
+        None,
+    )?;
+
+    stream.play()?;
+
+    // Wait for playback to complete
+    let duration = samples_len as f64 / spec.sample_rate as f64;
+    std::thread::sleep(Duration::from_secs_f64(duration + 0.1));
 
     Ok(())
 }
@@ -250,7 +365,6 @@ fn record_audio(duration_secs: u64) -> Result<Vec<u8>, Box<dyn std::error::Error
     let audio_data = std::fs::read(&temp_file)?;
 
     // Debug: Check if audio has non-zero samples
-    use hound::WavReader;
     let reader = WavReader::open(&temp_file)?;
     let samples: Result<Vec<i16>, _> = reader.into_samples().collect();
     if let Ok(samples) = samples {

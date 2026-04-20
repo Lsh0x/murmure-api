@@ -25,7 +25,7 @@
 //! - `--server <address>` - Server address (default: http://localhost:50051)
 
 use std::fs::File;
-use std::io::{self, BufWriter, Write};
+use std::io::{self, BufWriter, Cursor, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -34,7 +34,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, SupportedStreamConfig};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use hound::{WavSpec, WavWriter};
+use hound::{WavReader, WavSpec, WavWriter};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::ReceiverStream;
@@ -45,8 +45,9 @@ pub mod murmure {
     include!(concat!(env!("OUT_DIR"), "/murmure.rs"));
 }
 
+use murmure::synthesis_service_client::SynthesisServiceClient;
 use murmure::transcription_service_client::TranscriptionServiceClient;
-use murmure::{TranscribeStreamRequest, TranscribeStreamResponse};
+use murmure::{SynthesizeTextRequest, TranscribeStreamRequest, TranscribeStreamResponse};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 type SendResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -129,21 +130,22 @@ async fn main() -> Result<()> {
     print_welcome(&server_address);
 
     let audio_config = setup_audio()?;
-    let mut client = connect_to_server(&server_address).await?;
+    let (mut transcription_client, synthesis_client) = connect_to_server(&server_address).await?;
 
     print_instructions();
 
     enable_raw_mode()?;
     let shutdown_flag = setup_shutdown_handler();
 
-    let result = run_recording_loop(&mut client, &audio_config, shutdown_flag).await;
+    let result = run_recording_loop(&mut transcription_client, synthesis_client, &audio_config, shutdown_flag).await;
 
     disable_raw_mode()?;
     result
 }
 
 async fn run_recording_loop(
-    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    transcription_client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    mut synthesis_client: Option<SynthesisServiceClient<tonic::transport::Channel>>,
     audio_config: &AudioConfig,
     shutdown_flag: Arc<AtomicBool>,
 ) -> Result<()> {
@@ -168,7 +170,8 @@ async fn run_recording_loop(
                         handle_space_press(
                             &mut recording_state,
                             audio_config,
-                            client,
+                            transcription_client,
+                            &mut synthesis_client,
                             &mut conversation_text,
                         )
                         .await?;
@@ -189,7 +192,8 @@ async fn run_recording_loop(
 async fn handle_space_press(
     state: &mut RecordingState,
     audio_config: &AudioConfig,
-    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    transcription_client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    synthesis_client: &mut Option<SynthesisServiceClient<tonic::transport::Channel>>,
     conversation_text: &mut String,
 ) -> Result<()> {
     disable_raw_mode()?;
@@ -197,7 +201,7 @@ async fn handle_space_press(
     if !state.is_recording {
         start_recording(state, audio_config)?;
     } else {
-        stop_and_transcribe(state, client, conversation_text).await?;
+        stop_and_transcribe(state, transcription_client, synthesis_client, conversation_text).await?;
     }
 
     enable_raw_mode()?;
@@ -216,7 +220,8 @@ fn start_recording(state: &mut RecordingState, audio_config: &AudioConfig) -> Re
 
 async fn stop_and_transcribe(
     state: &mut RecordingState,
-    client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    transcription_client: &mut TranscriptionServiceClient<tonic::transport::Channel>,
+    synthesis_client: &mut Option<SynthesisServiceClient<tonic::transport::Channel>>,
     conversation_text: &mut String,
 ) -> Result<()> {
     println!("\n   ⏹️  Stopping recording...");
@@ -244,11 +249,23 @@ async fn stop_and_transcribe(
     print!("   📤 Sending to server for transcription...");
     io::stdout().flush()?;
 
-    match transcribe_audio(client, audio_data).await {
+    match transcribe_audio(transcription_client, audio_data).await {
         Ok(text) if !text.trim().is_empty() => {
-            println!("\r   ✅ Transcription #{}: {}\n", state.count, text);
+            println!("\r   ✅ Transcription #{}: {}", state.count, text);
             conversation_text.push_str(&text);
             conversation_text.push(' ');
+            
+            // Synthesize and play using TTS via gRPC
+            if let Some(ref mut client) = synthesis_client {
+                print!("   🔊 Synthesizing and playing via gRPC...");
+                io::stdout().flush()?;
+                if let Err(e) = synthesize_and_play_grpc(client, &text).await {
+                    println!("\r   ⚠️  TTS error: {} (continuing anyway)", e);
+                } else {
+                    println!("\r   ✅ TTS playback complete");
+                }
+            }
+            println!();
         }
         Ok(_) => {
             println!("\r   ⚠️  Empty transcription\n");
@@ -327,11 +344,22 @@ fn setup_audio() -> Result<AudioConfig> {
 
 async fn connect_to_server(
     address: &str,
-) -> Result<TranscriptionServiceClient<tonic::transport::Channel>> {
+) -> Result<(
+    TranscriptionServiceClient<tonic::transport::Channel>,
+    Option<SynthesisServiceClient<tonic::transport::Channel>>,
+)> {
     println!("📡 Connecting to server...");
-    let client = TranscriptionServiceClient::connect(address.to_string()).await?;
-    println!("✅ Connected to server\n");
-    Ok(client)
+    let transcription_client = TranscriptionServiceClient::connect(address.to_string()).await?;
+    
+    // Try to connect to TTS service (optional)
+    let synthesis_client = SynthesisServiceClient::connect(address.to_string()).await.ok();
+    if synthesis_client.is_some() {
+        println!("✅ Connected to server (STT + TTS)\n");
+    } else {
+        println!("✅ Connected to server (STT only, TTS not available)\n");
+    }
+    
+    Ok((transcription_client, synthesis_client))
 }
 
 fn setup_shutdown_handler() -> Arc<AtomicBool> {
@@ -560,4 +588,106 @@ async fn process_transcription_responses(
     }
 
     Ok(final_text)
+}
+
+// ============================================================================
+// TTS (Text-To-Speech) via gRPC
+// ============================================================================
+
+async fn synthesize_and_play_grpc(
+    client: &mut SynthesisServiceClient<tonic::transport::Channel>,
+    text: &str,
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Synthesize text to audio via gRPC
+    let request = Request::new(SynthesizeTextRequest {
+        text: text.to_string(),
+        speaker_id: None,
+        speed: None,
+    });
+
+    let response = client.synthesize_text(request).await?;
+    let synthesis = response.into_inner();
+
+    if !synthesis.success {
+        return Err(format!("Synthesis failed: {}", synthesis.error).into());
+    }
+
+    // Play the audio
+    play_wav_bytes(&synthesis.audio_data)?;
+
+    Ok(())
+}
+
+fn play_wav_bytes(wav_bytes: &[u8]) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    // Read WAV file from bytes
+    let cursor = Cursor::new(wav_bytes);
+    let mut reader = WavReader::new(cursor)?;
+    let spec = reader.spec();
+
+    // Convert samples to f32
+    let samples: Vec<f32> = reader
+        .samples::<i16>()
+        .map(|s| {
+            s.map(|sample| sample as f32 / i16::MAX as f32)
+                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to read WAV sample: {}", e))) as Box<dyn std::error::Error>)
+        })
+        .collect::<std::result::Result<Vec<f32>, Box<dyn std::error::Error>>>()?;
+
+    if samples.is_empty() {
+        return Err("No audio samples to play".into());
+    }
+
+    // Get default output device
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or("No default output device available")?;
+
+    // Create output config matching WAV file
+    let config = cpal::StreamConfig {
+        channels: spec.channels as u16,
+        sample_rate: cpal::SampleRate(spec.sample_rate),
+        buffer_size: cpal::BufferSize::Default,
+    };
+
+    // Use a channel to feed samples to the stream
+    let (tx, rx) = std::sync::mpsc::channel();
+    let samples_len = samples.len();
+    
+    // Send samples in chunks
+    std::thread::spawn(move || {
+        for chunk in samples.chunks(1024) {
+            let chunk_vec = chunk.to_vec();
+            if tx.send(chunk_vec).is_err() {
+                break;
+            }
+        }
+    });
+
+    // Create output stream
+    let stream = device.build_output_stream(
+        &config,
+        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+            // Try to get samples from channel, otherwise fill with zeros
+            if let Ok(chunk) = rx.try_recv() {
+                let len = data.len().min(chunk.len());
+                data[..len].copy_from_slice(&chunk[..len]);
+                if len < data.len() {
+                    data[len..].fill(0.0);
+                }
+            } else {
+                data.fill(0.0);
+            }
+        },
+        |err| eprintln!("Playback error: {}", err),
+        None,
+    )?;
+
+    stream.play()?;
+
+    // Wait for playback to complete
+    let duration = samples_len as f64 / spec.sample_rate as f64;
+    std::thread::sleep(Duration::from_secs_f64(duration + 0.1));
+
+    Ok(())
 }

@@ -39,4 +39,5 @@ target/
 
 # Rust incremental compilation
 **/incremental/
-*.pdb
+*.pdbresources/
+*.onnx

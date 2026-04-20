@@ -109,9 +109,12 @@ impl ServerConfig {
         const MODEL_FILENAME: &str = "parakeet-tdt-0.6b-v3-int8";
 
         let possible_paths = vec![
+            PathBuf::from(format!("resources/stt/{}", MODEL_FILENAME)),
+            PathBuf::from(format!("../resources/stt/{}", MODEL_FILENAME)),
+            PathBuf::from(format!("_up_/resources/stt/{}", MODEL_FILENAME)),
+            // Legacy paths for backward compatibility
             PathBuf::from(format!("resources/{}", MODEL_FILENAME)),
             PathBuf::from(format!("../resources/{}", MODEL_FILENAME)),
-            PathBuf::from(format!("_up_/resources/{}", MODEL_FILENAME)),
         ];
 
         for path in possible_paths {
@@ -124,22 +127,35 @@ impl ServerConfig {
         // Try relative to executable
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
+                let stt_dev_path = exe_dir.join("_up_").join("resources").join("stt").join(MODEL_FILENAME);
+                if stt_dev_path.exists() {
+                    println!("Model found at dev location: {}", stt_dev_path.display());
+                    return Ok(stt_dev_path);
+                }
+
+                let stt_resource_path = exe_dir.join("resources").join("stt").join(MODEL_FILENAME);
+                if stt_resource_path.exists() {
+                    println!("Model found at: {}", stt_resource_path.display());
+                    return Ok(stt_resource_path);
+                }
+
+                // Legacy paths for backward compatibility
                 let dev_path = exe_dir.join("_up_").join("resources").join(MODEL_FILENAME);
                 if dev_path.exists() {
-                    println!("Model found at dev location: {}", dev_path.display());
+                    println!("Model found at dev location (legacy): {}", dev_path.display());
                     return Ok(dev_path);
                 }
 
                 let resource_path = exe_dir.join("resources").join(MODEL_FILENAME);
                 if resource_path.exists() {
-                    println!("Model found at: {}", resource_path.display());
+                    println!("Model found at (legacy): {}", resource_path.display());
                     return Ok(resource_path);
                 }
             }
         }
 
         anyhow::bail!(
-            "Model '{}' not found. Set MURMURE_MODEL_PATH environment variable or place model in resources/ directory.",
+            "Model '{}' not found. Set MURMURE_MODEL_PATH environment variable or place model in resources/stt/ directory.",
             MODEL_FILENAME
         )
     }
